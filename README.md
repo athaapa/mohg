@@ -2,12 +2,14 @@
 
 A simple moog-inspired monophonic synthesizer for MacOS written in Odin.
 
-# Features
-- Two oscillators
+# Planned Features
+- two oscillators
 - ADSR
-- Ladder filter
-
-# Potential Additions
-- Chorus
+- filter + filter envelope
 - LFO
-- Reverb
+- velocity/pitch bend/sustain
+- polyphony
+- unison
+- chorus/delay
+- modulation routing
+- presets
