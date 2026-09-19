@@ -17,6 +17,7 @@ Synth :: struct {
 	gate:              bool,
 	current_amplitude: f64,
 	adsr_config:       ADSR_Config,
+	ladder_filter:     Ladder_Filter,
 }
 
 
@@ -50,7 +51,9 @@ synth_render :: proc "contextless" (
 	phase_step := synth.frequency / synth.sample_rate
 
 	for frame in 0 ..< frame_count {
-		sample := f32(0.2 * synth.current_amplitude * math.sin(2 * math.PI * synth.phase))
+		sample := f32(0.2 * synth.current_amplitude * generate_saw_wave(synth.phase))
+
+		sample = ladder_filter_process(&synth.ladder_filter, sample)
 
 		new_state: ADSR_State
 		switch synth.adsr_config.state {

@@ -22,16 +22,22 @@ Engine :: struct {
 }
 
 main :: proc() {
+	ladder_filter := Ladder_Filter{}
+
+	ladder_filter_set_sample_rate(&ladder_filter, 48_000)
+	ladder_filter_set_parameters(&ladder_filter, 1_000, 0.2)
+
 	synth := Synth {
 		frequency = 440,
 		sample_rate = 48_000,
 		adsr_config = ADSR_Config {
 			state = ADSR_State.IDLE,
-			attack_seconds = 1,
+			attack_seconds = 0.5,
 			decay_seconds = 0.25,
-			sustain_level = 0.7,
-			release_seconds = 0.5,
+			sustain_level = 1,
+			release_seconds = 0.1,
 		},
+		ladder_filter = ladder_filter,
 	}
 
 	midi: Midi_Input
