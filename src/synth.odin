@@ -2,11 +2,21 @@ package mohg
 
 import "core:math"
 
+ADSR_Config :: struct {
+	state:           ADSR_State,
+	attack_seconds:  f64,
+	decay_seconds:   f64,
+	sustain_level:   f64,
+	release_seconds: f64,
+}
+
 Synth :: struct {
-	phase:       f64,
-	frequency:   f64,
-	sample_rate: f64,
-	gate:        bool,
+	phase:             f64,
+	frequency:         f64,
+	sample_rate:       f64,
+	gate:              bool,
+	current_amplitude: f64,
+	adsr_config:       ADSR_Config,
 }
 
 
@@ -31,6 +41,48 @@ note_off :: proc "c" (held_notes: ^Held_Notes, note: u8) {
 	}
 }
 
+synth_render :: proc "contextless" (
+	synth: ^Synth,
+	samples: [^]f32,
+	frame_count: int,
+	channel_count: int,
+) {
+	phase_step := synth.frequency / synth.sample_rate
+
+	for frame in 0 ..< frame_count {
+		sample := f32(0.2 * synth.current_amplitude * math.sin(2 * math.PI * synth.phase))
+
+		new_state: ADSR_State
+		switch synth.adsr_config.state {
+		case ADSR_State.IDLE:
+			new_state = on_idle(synth)
+		case ADSR_State.ATTACK:
+			new_state = on_attack(synth)
+		case ADSR_State.DECAY:
+			new_state = on_decay(synth)
+		case ADSR_State.SUSTAIN:
+			new_state = on_sustain(synth)
+		case ADSR_State.RELEASE:
+			new_state = on_release(synth)
+		}
+
+		synth.adsr_config.state = new_state
+
+
+		if synth.current_amplitude > 0 {
+			synth.phase += phase_step
+			if synth.phase >= 1 {
+				synth.phase -= 1
+			}
+		}
+
+
+		for channel in 0 ..< channel_count {
+			samples[frame * channel_count + channel] = sample
+		}
+	}
+}
+
 render :: proc "c" (
 	inRefCon: rawptr,
 	ioActionFlags: ^AudioUnitRenderActionFlags,
@@ -41,6 +93,7 @@ render :: proc "c" (
 ) -> OSStatus {
 	engine := cast(^Engine)inRefCon
 	synth := &engine.synth
+
 	midi_data := engine.midi_data
 
 	queue := midi_data.midi_events
@@ -78,25 +131,7 @@ render :: proc "c" (
 	}
 
 
-	phase_step := synth.frequency / synth.sample_rate
-
-	for frame in 0 ..< int(inNumberFrames) {
-		sample: f32 = 0
-
-		if synth.gate {
-			sample = f32(0.1 * math.sin(2 * math.PI * synth.phase))
-
-			synth.phase += phase_step
-			if synth.phase >= 1 {
-				synth.phase -= 1
-			}
-		}
-
-		for channel in 0 ..< channel_count {
-			samples[frame * channel_count + channel] = sample
-		}
-
-	}
+	synth_render(synth, samples, int(inNumberFrames), channel_count)
 
 	return 0
 }

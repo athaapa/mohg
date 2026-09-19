@@ -23,8 +23,15 @@ Engine :: struct {
 
 main :: proc() {
 	synth := Synth {
-		frequency   = 440,
+		frequency = 440,
 		sample_rate = 48_000,
+		adsr_config = ADSR_Config {
+			state = ADSR_State.IDLE,
+			attack_seconds = 1,
+			decay_seconds = 0.25,
+			sustain_level = 0.7,
+			release_seconds = 0.5,
+		},
 	}
 
 	midi: Midi_Input
