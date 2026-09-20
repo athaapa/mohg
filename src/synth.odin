@@ -98,41 +98,15 @@ render :: proc "c" (
 	synth := &engine.synth
 
 	midi_data := engine.midi_data
-
-	queue := midi_data.midi_events
-	held_notes := midi_data.held_notes
+	parameter_data := engine.parameter_data
+	queue := midi_data.midi_event_queue
 
 	buffer := &ioData.mBuffers[0]
 	samples := cast([^]f32)buffer.mData
 	channel_count := int(buffer.mNumberChannels)
 
-	for {
-		event, ok := midi_queue_try_pop(queue)
-		if !ok {
-			break
-		}
-
-		switch event.kind {
-		case .Note_On:
-			{
-				note_on(held_notes, event.note)
-			}
-		case .Note_Off:
-			{
-				note_off(held_notes, event.note)
-			}
-		}
-	}
-
-	if (held_notes.held_count > 0) {
-		synth.frequency =
-			440.0 *
-			math.pow(2.0, (f64(held_notes.held[held_notes.held_count - 1].value) - 69.0) / 12.0)
-		synth.gate = true
-	} else {
-		synth.gate = false
-	}
-
+	process_midi_events(synth, queue, midi_data.held_notes)
+	process_parameter_events(synth, parameter_data.parameter_event_queue)
 
 	synth_render(synth, samples, int(inNumberFrames), channel_count)
 

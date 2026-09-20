@@ -58,8 +58,8 @@ foreign CoreMIDI {
 	MIDIPortConnectSource :: proc(port: MIDIPortRef, source: MIDIEndpointRef, connRefCon: rawptr) -> OSStatus ---
 }
 
-process_midi :: proc "c" (event_list: ^MIDIEventList, cntxt: rawptr, source_cntxt: rawptr) {
-	queue := cast(^Midi_Event_Queue)cntxt
+fill_midi_queue :: proc "c" (event_list: ^MIDIEventList, cntxt: rawptr, source_cntxt: rawptr) {
+	queue := cast(^Spsc_Queue(Midi_Event, MIDI_QUEUE_CAPACITY))cntxt
 
 	packet := &event_list.packet[0]
 	for _ in 0 ..< int(event_list.numPackets) {
@@ -98,7 +98,8 @@ process_midi :: proc "c" (event_list: ^MIDIEventList, cntxt: rawptr, source_cntx
 				continue
 			}
 
-			_ = midi_queue_try_push(queue, event)
+
+			_ = spsc_try_push(queue, event)
 		}
 
 		packet = cast(^MIDIEventPacket)(&words[word_count])
@@ -113,7 +114,7 @@ Midi_Input :: struct {
 
 
 midi_input_init :: proc(midi: ^Midi_Input, midi_data: ^Midi_Data) -> OSStatus {
-	queue := midi_data.midi_events
+	queue := midi_data.midi_event_queue
 
 	name := CFStringCreateWithCString(nil, cstring("mohg"), kCFStringEncodingUTF8)
 	port_name := CFStringCreateWithCString(nil, cstring("port"), kCFStringEncodingUTF8)
@@ -140,7 +141,7 @@ midi_input_init :: proc(midi: ^Midi_Input, midi_data: ^Midi_Data) -> OSStatus {
 		MIDIProtocolID.kMIDIProtocol_1_0,
 		&midi.port,
 		rawptr(queue),
-		process_midi,
+		fill_midi_queue,
 	)
 
 	if (status != 0) {
@@ -160,9 +161,9 @@ midi_input_init :: proc(midi: ^Midi_Input, midi_data: ^Midi_Data) -> OSStatus {
 
 		connect_status := MIDIPortConnectSource(midi.port, source, nil)
 		if connect_status != 0 {
-			fmt.printf("failed to connect to source index %v", i)
+			fmt.printfln("failed to connect to source index %v", i)
 		} else {
-			fmt.printf("connected to source index %v", i)
+			fmt.printfln("connected to source index %v", i)
 			connected = true
 			break
 		}
