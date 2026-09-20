@@ -11,12 +11,12 @@ Ladder_Filter :: struct {
 	stage:       [4]f32,
 }
 
-ladder_filter_set_sample_rate :: proc(filter: ^Ladder_Filter, sample_rate: f32) {
+ladder_filter_set_sample_rate :: proc "contextless" (filter: ^Ladder_Filter, sample_rate: f32) {
 	filter.sample_rate = math.max(sample_rate, 0)
 	ladder_filter_calculate_coefficients(filter)
 }
 
-ladder_filter_calculate_coefficients :: proc(filter: ^Ladder_Filter) {
+ladder_filter_calculate_coefficients :: proc "contextless" (filter: ^Ladder_Filter) {
 	if filter.sample_rate <= 0 || filter.cutoff_hz <= 0 {
 		filter.alpha = 1
 		filter.beta = 0
@@ -34,7 +34,7 @@ ladder_filter_calculate_coefficients :: proc(filter: ^Ladder_Filter) {
 	filter.beta = 1.0 - filter.alpha
 }
 
-ladder_filter_set_parameters :: proc(filter: ^Ladder_Filter, cutoff_hz: f32, resonance: f32) {
+ladder_filter_set_parameters :: proc "contextless" (filter: ^Ladder_Filter, cutoff_hz: f32, resonance: f32) {
 	max_cutoff := filter.sample_rate * 0.45
 	if max_cutoff < 1.0 {
 		max_cutoff = 1.0
@@ -45,7 +45,7 @@ ladder_filter_set_parameters :: proc(filter: ^Ladder_Filter, cutoff_hz: f32, res
 	ladder_filter_calculate_coefficients(filter)
 }
 
-ladder_filter_reset :: proc(filter: ^Ladder_Filter) {
+ladder_filter_reset :: proc "contextless" (filter: ^Ladder_Filter) {
 	filter.stage = [4]f32{}
 }
 
