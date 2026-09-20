@@ -95,6 +95,8 @@ render :: proc "c" (
 	ioData: ^AudioBufferList,
 ) -> OSStatus {
 	engine := cast(^Engine)inRefCon
+	start := mach_absolute_time()
+
 	synth := &engine.synth
 
 	midi_data := engine.midi_data
@@ -109,6 +111,9 @@ render :: proc "c" (
 	process_parameter_events(synth, parameter_data.parameter_event_queue)
 
 	synth_render(synth, samples, int(inNumberFrames), channel_count)
+
+	elapsed := mach_absolute_time() - start
+	render_metrics_record(&engine.render_metrics, elapsed, inNumberFrames)
 
 	return 0
 }

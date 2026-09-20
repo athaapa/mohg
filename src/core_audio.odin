@@ -253,26 +253,21 @@ audio_init :: proc(engine: ^Engine, unit: ^AudioUnit) {
 		panic("failed to initialize audio unit")
 	}
 
-	// start
-	status = AudioOutputUnitStart(unit^)
-	if (status != 0) {
-		panic("failed to start audio unit")
-	}
 }
 
 audio_destroy :: proc(unit: ^AudioUnit) {
 	// clean up
-	status := AudioOutputUnitStop(unit)
+	status := AudioOutputUnitStop(unit^)
 	if (status != 0) {
 		panic("failed to stop audio unit")
 	}
 
-	status = AudioUnitUninitialize(unit)
+	status = AudioUnitUninitialize(unit^)
 	if (status != 0) {
 		panic("failed to uninitialize audio unit")
 	}
 
-	status = AudioComponentInstanceDispose(unit)
+	status = AudioComponentInstanceDispose(unit^)
 
 	if (status != 0) {
 		panic("failed to dispose audio unit")

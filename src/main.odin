@@ -1,6 +1,7 @@
 package mohg
 
-import "core:time"
+import "core:fmt"
+import "core:os"
 
 Note :: struct {
 	value: u8,
@@ -24,9 +25,17 @@ Engine :: struct {
 	synth:          Synth,
 	midi_data:      ^Midi_Data,
 	parameter_data: ^Parameter_Data,
+	render_metrics: Render_Metrics,
 }
 
 main :: proc() {
+	timebase: Mach_Timebase_Info
+
+	status := mach_timebase_info(&timebase)
+	if status != 0 {
+		panic("mach_timebase_info failed")
+	}
+
 	synth := Synth {
 		frequency = 440,
 		sample_rate = 48_000,
@@ -66,16 +75,31 @@ main :: proc() {
 		parameter_data = &parameter_data,
 	}
 
-	status := midi_input_init(&midi, &midi_data)
+	status = midi_input_init(&midi, &midi_data)
 	if (status != 0) {
 		panic("failed to initalize midi")
 	}
 
-	ladder_filter_set_sample_rate(&engine.synth.ladder_filter, f32(synth.sample_rate))
-	ladder_filter_set_parameters(&engine.synth.ladder_filter, 1_000, 0.6)
 
 	unit: AudioUnit
 	audio_init(&engine, &unit)
+	render_metrics_init(&engine.render_metrics, timebase, engine.synth.sample_rate)
 
-	time.sleep(30 * time.Second)
+	ladder_filter_set_sample_rate(&engine.synth.ladder_filter, f32(synth.sample_rate))
+	ladder_filter_set_parameters(&engine.synth.ladder_filter, 1_000, 0.6)
+
+	// start
+	status = AudioOutputUnitStart(unit)
+	if (status != 0) {
+		panic("failed to start audio unit")
+	}
+
+
+	fmt.println("Press Enter to exit")
+	input: [1]byte
+	_, _ = os.read(os.stdin, input[:])
+
+
+	audio_destroy(&unit)
+	render_metrics_print(&engine.render_metrics)
 }
