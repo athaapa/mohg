@@ -1,7 +1,9 @@
 package mohg
 
+// Parameter event transport: control-thread changes (cutoff, resonance)
+// crossing to the audio thread, applied to the synth between renders.
+
 PARAMETER_QUEUE_CAPACITY :: 512
-PARAMETER_QUEUE_MASK :: u64(PARAMETER_QUEUE_CAPACITY - 1)
 
 Ladder_Filter_Cutoff_Event :: struct {
 	cutoff_hz: f32,
@@ -15,6 +17,7 @@ Parameter_Event :: union {
 	Ladder_Filter_Resonance_Event,
 }
 
+// TODO: Update all active voices with these parameters
 process_parameter_events :: proc "contextless" (
 	synth: ^Synth,
 	queue: ^Spsc_Queue(Parameter_Event, PARAMETER_QUEUE_CAPACITY),

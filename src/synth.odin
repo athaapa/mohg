@@ -1,9 +1,9 @@
 package mohg
 
-import "core:math"
+// Synth: the instrument. Owns the patch (ADSR config, template filter),
+// reacts to MIDI events, and renders voices into a sample buffer.
 
 ADSR_Config :: struct {
-	state:           ADSR_State,
 	attack_seconds:  f64,
 	decay_seconds:   f64,
 	sustain_level:   f64,
@@ -11,72 +11,88 @@ ADSR_Config :: struct {
 }
 
 Synth :: struct {
-	phase:             f64,
-	frequency:         f64,
-	sample_rate:       f64,
-	gate:              bool,
-	current_amplitude: f64,
-	adsr_config:       ADSR_Config,
-	ladder_filter:     Ladder_Filter,
+	sample_rate:   f64,
+	adsr_config:   ADSR_Config,
+	ladder_filter: Ladder_Filter,
+	max_voices:    i32,
+	voices:        ^Voices,
 }
 
-
-// TODO: consider the edge case of when a note is held multiple times or the capacity somehow gets overflowed
-note_on :: proc "c" (held_notes: ^Held_Notes, note: u8) {
-	held_notes.held[held_notes.held_count].value = note
-	held_notes.held_count += 1
-}
-
-note_off :: proc "c" (held_notes: ^Held_Notes, note: u8) {
-	held := &held_notes.held
-	held_count := &held_notes.held_count
-
-	for i in 0 ..< held_notes.held_count {
-		if held[i].value == note {
-			for j in i ..< held_count^ - 1 {
-				held[j] = held[j + 1]
-			}
-			held_count^ -= 1
+synth_process_midi :: proc "contextless" (
+	synth: ^Synth,
+	queue: ^Spsc_Queue(Midi_Event, MIDI_QUEUE_CAPACITY),
+) {
+	for {
+		event, ok := spsc_try_pop(queue)
+		if !ok {
 			break
+		}
+
+		switch event.kind {
+		case .Note_On:
+			{
+				voice := note_on(synth.voices, event.note)
+				voice.ladder_filter = synth.ladder_filter
+				ladder_filter_reset(&voice.ladder_filter)
+			}
+		case .Note_Off:
+			{
+				note_off(synth.voices, event.note)
+			}
 		}
 	}
 }
 
 synth_render :: proc "contextless" (
 	synth: ^Synth,
+	voices: ^Voices,
 	samples: [^]f32,
 	frame_count: int,
 	channel_count: int,
 ) {
-	phase_step := synth.frequency / synth.sample_rate
 
 	for frame in 0 ..< frame_count {
-		sample := f32(0.2 * synth.current_amplitude * generate_saw_wave(synth.phase))
+		sample: f32
 
-		sample = ladder_filter_process(&synth.ladder_filter, sample)
+		voice_index: u8
+		for voice_index < voices.voice_count {
+			voice := &voices.voices[voice_index]
 
-		new_state: ADSR_State
-		switch synth.adsr_config.state {
-		case ADSR_State.IDLE:
-			new_state = on_idle(synth)
-		case ADSR_State.ATTACK:
-			new_state = on_attack(synth)
-		case ADSR_State.DECAY:
-			new_state = on_decay(synth)
-		case ADSR_State.SUSTAIN:
-			new_state = on_sustain(synth)
-		case ADSR_State.RELEASE:
-			new_state = on_release(synth)
-		}
+			phase_step := voice.frequency / synth.sample_rate
 
-		synth.adsr_config.state = new_state
+			voice_sample := f32(0.2 * voice.current_amplitude * generate_saw_wave(voice.phase))
+			voice_sample = ladder_filter_process(&voice.ladder_filter, voice_sample)
+			sample += voice_sample
 
-
-		if synth.current_amplitude > 0 {
-			synth.phase += phase_step
-			if synth.phase >= 1 {
-				synth.phase -= 1
+			new_state: ADSR_State
+			switch voice.state {
+			case ADSR_State.IDLE:
+				new_state = on_idle(synth, voice)
+			case ADSR_State.ATTACK:
+				new_state = on_attack(synth, voice)
+			case ADSR_State.DECAY:
+				new_state = on_decay(synth, voice)
+			case ADSR_State.SUSTAIN:
+				new_state = on_sustain(synth, voice)
+			case ADSR_State.RELEASE:
+				new_state = on_release(synth, voice)
 			}
+
+			voice.state = new_state
+
+			if voice.state == ADSR_State.IDLE && !voice.gate {
+				voice_remove(voices, voice_index)
+				continue
+			}
+
+			if voice.current_amplitude > 0 {
+				voice.phase += phase_step
+				if voice.phase >= 1 {
+					voice.phase -= 1
+				}
+			}
+
+			voice_index += 1
 		}
 
 
@@ -84,36 +100,4 @@ synth_render :: proc "contextless" (
 			samples[frame * channel_count + channel] = sample
 		}
 	}
-}
-
-render :: proc "c" (
-	inRefCon: rawptr,
-	ioActionFlags: ^AudioUnitRenderActionFlags,
-	inTimeStamp: ^AudioTimeStamp,
-	inBusNumber: u32,
-	inNumberFrames: u32,
-	ioData: ^AudioBufferList,
-) -> OSStatus {
-	engine := cast(^Engine)inRefCon
-	start := mach_absolute_time()
-
-	synth := &engine.synth
-
-	midi_data := engine.midi_data
-	parameter_data := engine.parameter_data
-	queue := midi_data.midi_event_queue
-
-	buffer := &ioData.mBuffers[0]
-	samples := cast([^]f32)buffer.mData
-	channel_count := int(buffer.mNumberChannels)
-
-	process_midi_events(synth, queue, midi_data.held_notes)
-	process_parameter_events(synth, parameter_data.parameter_event_queue)
-
-	synth_render(synth, samples, int(inNumberFrames), channel_count)
-
-	elapsed := mach_absolute_time() - start
-	render_metrics_record(&engine.render_metrics, elapsed, inNumberFrames)
-
-	return 0
 }
