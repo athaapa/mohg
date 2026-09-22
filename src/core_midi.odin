@@ -113,9 +113,10 @@ Midi_Input :: struct {
 }
 
 
-midi_input_init :: proc(midi: ^Midi_Input, midi_data: ^Midi_Data) -> OSStatus {
-	queue := midi_data.midi_event_queue
-
+midi_input_init :: proc(
+	midi: ^Midi_Input,
+	queue: ^Spsc_Queue(Midi_Event, MIDI_QUEUE_CAPACITY),
+) -> OSStatus {
 	name := CFStringCreateWithCString(nil, cstring("mohg"), kCFStringEncodingUTF8)
 	port_name := CFStringCreateWithCString(nil, cstring("port"), kCFStringEncodingUTF8)
 

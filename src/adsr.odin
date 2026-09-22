@@ -10,16 +10,16 @@ ADSR_State :: enum {
 	RELEASE,
 }
 
-on_idle :: proc "contextless" (synth: ^Synth) -> ADSR_State {
-	if synth.gate {
+on_idle :: proc "contextless" (synth: ^Synth, voice: ^Voice) -> ADSR_State {
+	if voice.gate {
 		return ADSR_State.ATTACK
 	}
 
 	return ADSR_State.IDLE
 }
 
-on_attack :: proc "contextless" (synth: ^Synth) -> ADSR_State {
-	if !synth.gate {
+on_attack :: proc "contextless" (synth: ^Synth, voice: ^Voice) -> ADSR_State {
+	if !voice.gate {
 		return ADSR_State.RELEASE
 	}
 
@@ -29,17 +29,17 @@ on_attack :: proc "contextless" (synth: ^Synth) -> ADSR_State {
 
 	attack_step := f64(1.0) / (attack_seconds * sample_rate)
 
-	synth.current_amplitude = math.min(1.0, synth.current_amplitude + attack_step)
+	voice.current_amplitude = math.min(1.0, voice.current_amplitude + attack_step)
 
-	if synth.current_amplitude == 1.0 {
+	if voice.current_amplitude == 1.0 {
 		return ADSR_State.DECAY
 	}
 
 	return ADSR_State.ATTACK
 }
 
-on_decay :: proc "contextless" (synth: ^Synth) -> ADSR_State {
-	if !synth.gate {
+on_decay :: proc "contextless" (synth: ^Synth, voice: ^Voice) -> ADSR_State {
+	if !voice.gate {
 		return ADSR_State.RELEASE
 	}
 
@@ -50,10 +50,10 @@ on_decay :: proc "contextless" (synth: ^Synth) -> ADSR_State {
 
 	decay_step := (1.0 - sustain_level) / (decay_seconds * synth.sample_rate)
 
-	synth.current_amplitude = math.max(sustain_level, synth.current_amplitude - decay_step)
+	voice.current_amplitude = math.max(sustain_level, voice.current_amplitude - decay_step)
 
 
-	if (synth.current_amplitude == sustain_level) {
+	if (voice.current_amplitude == sustain_level) {
 		return ADSR_State.SUSTAIN
 	}
 
@@ -61,16 +61,16 @@ on_decay :: proc "contextless" (synth: ^Synth) -> ADSR_State {
 	return ADSR_State.DECAY
 }
 
-on_sustain :: proc "contextless" (synth: ^Synth) -> ADSR_State {
-	if !synth.gate {
+on_sustain :: proc "contextless" (synth: ^Synth, voice: ^Voice) -> ADSR_State {
+	if !voice.gate {
 		return ADSR_State.RELEASE
 	}
 
 	return ADSR_State.SUSTAIN
 }
 
-on_release :: proc "contextless" (synth: ^Synth) -> ADSR_State {
-	if synth.gate {
+on_release :: proc "contextless" (synth: ^Synth, voice: ^Voice) -> ADSR_State {
+	if voice.gate {
 		return ADSR_State.ATTACK
 	}
 
@@ -82,11 +82,11 @@ on_release :: proc "contextless" (synth: ^Synth) -> ADSR_State {
 	release_multiplier := math.exp(-6.91 / release_samples)
 	release_target := -0.001
 
-	synth.current_amplitude =
-		release_target + (synth.current_amplitude - release_target) * release_multiplier
+	voice.current_amplitude =
+		release_target + (voice.current_amplitude - release_target) * release_multiplier
 
-	if synth.current_amplitude <= 0.0 {
-		synth.current_amplitude = 0.0
+	if voice.current_amplitude <= 0.0 {
+		voice.current_amplitude = 0.0
 		return ADSR_State.IDLE
 	}
 
