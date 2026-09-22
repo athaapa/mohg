@@ -8,13 +8,12 @@ A simple moog-inspired monophonic synthesizer for MacOS written in Odin.
 - sine, square, triangle, saw wave
 - ladder filter
 
+aim to get this running well on a 64 sample audio buffer.
+
+
 # Planned Features
-- second oscillator
-- filter + filter envelope
-- LFO
-- velocity/pitch bend/sustain
 - polyphony
-- unison
-- chorus/delay
-- modulation routing
+- modulation system
+- nonlinear ladder filter with selectable oversampling (1x/2x/4x)
+- effects (chorus and delay at the minimum)
 - presets
