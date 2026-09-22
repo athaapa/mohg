@@ -159,6 +159,11 @@ kAudioFormatFlagIsPacked :: AudioFormatFlags(1 << 3)
 
 kAudioUnitScope_Output :: AudioUnitScope(2)
 
+kAudioUnitScope_Global :: AudioUnitScope(0)
+kAudioDevicePropertyBufferFrameSize :: AudioUnitPropertyID(
+	(u32('f') << 24) | (u32('s') << 16) | (u32('i') << 8) | u32('z'),
+)
+
 
 audio_init :: proc(engine: ^Engine, unit: ^AudioUnit) {
 	synth := &engine.synth
@@ -246,6 +251,16 @@ audio_init :: proc(engine: ^Engine, unit: ^AudioUnit) {
 	if (status != 0) {
 		panic("failed to set render callback")
 	}
+
+	frames := u32(64)
+	status = AudioUnitSetProperty(
+		unit^,
+		kAudioDevicePropertyBufferFrameSize,
+		kAudioUnitScope_Global,
+		0,
+		rawptr(&frames),
+		u32(size_of(frames)),
+	)
 
 	// initialize
 	status = AudioUnitInitialize(unit^)
