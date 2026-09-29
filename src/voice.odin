@@ -1,18 +1,22 @@
 package mohg
 
 import "core:math"
-// Voice pool: fixed storage for sounding voices plus note on/off bookkeeping.
-// A voice outlives its key: note_off clears the gate and the voice stays in
-// the pool until its envelope returns to IDLE.
+
+Oscillator :: struct {
+	phase: f64,
+	pan:   f64,
+	drift: f64,
+}
 
 Voice :: struct {
-	note:              u8,
-	gate:              bool,
-	state:             ADSR_State,
-	current_amplitude: f64,
-	phase:             f64,
-	ladder_filter:     Ladder_Filter,
-	frequency:         f64,
+	note:                u8,
+	gate:                bool,
+	state:               ADSR_State,
+	current_amplitude:   f64,
+	left_ladder_filter:  Ladder_Filter,
+	right_ladder_filter: Ladder_Filter,
+	frequency:           f64,
+	oscillators:         [16]Oscillator,
 }
 
 Voices :: struct {
@@ -20,17 +24,33 @@ Voices :: struct {
 	voice_count: u8,
 }
 
-// TODO: consider the edge case of when a note is held multiple times or the capacity somehow gets overflowed
-note_on :: proc "c" (voices: ^Voices, note: u8) -> ^Voice {
-	voice := &voices.voices[voices.voice_count]
-	voice^ = Voice {
-		note      = note,
-		gate      = true,
-		state     = ADSR_State.IDLE,
-		frequency = 440.0 * math.pow(2.0, (f64(note) - 69.0) / 12.0),
+note_on :: proc "c" (voices: ^Voices, max_voices: u8, note: u8) -> (^Voice, bool) {
+	voice: ^Voice
+	if (voices.voice_count < max_voices) {
+		voice = &voices.voices[voices.voice_count]
+		voice^ = Voice {
+			note      = note,
+			gate      = true,
+			state     = ADSR_State.IDLE,
+			frequency = 440.0 * math.pow(2.0, (f64(note) - 69.0) / 12.0),
+		}
+		voices.voice_count += 1
+		return voice, false
+	} else {
+		cur_voice := voices.voices[0]
+
+		for i in 0 ..< int(voices.voice_count) - 1 {
+			voices.voices[i] = voices.voices[i + 1]
+		}
+
+		cur_voice.frequency = 440.0 * math.pow(2.0, (f64(note) - 69.0) / 12.0)
+		cur_voice.note = note
+		cur_voice.gate = true
+
+		voices.voices[voices.voice_count - 1] = cur_voice
+		voice = &voices.voices[voices.voice_count - 1]
+		return voice, true
 	}
-	voices.voice_count += 1
-	return voice
 }
 
 note_off :: proc "c" (voices: ^Voices, note: u8) {
