@@ -28,7 +28,7 @@ render :: proc "c" (
 	samples := cast([^]f32)buffer.mData
 	channel_count := int(buffer.mNumberChannels)
 
-	synth_process_midi(synth, engine.midi_event_queue)
+	synth_process_midi(synth, engine.midi_event_queue, engine.parameter_event_queue)
 	process_parameter_events(synth, engine.parameter_event_queue)
 
 	synth_render(synth, synth.voices, samples, int(inNumberFrames), channel_count)

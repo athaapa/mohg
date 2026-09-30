@@ -5,14 +5,18 @@ package mohg
 
 MIDI_QUEUE_CAPACITY :: 64
 
-Midi_Event_Kind :: enum u8 {
-	Note_On,
-	Note_Off,
+Midi_Note_On :: struct {
+	channel, note, velocity: u8,
+}
+Midi_Note_Off :: struct {
+	channel, note, velocity: u8,
+}
+Midi_CC :: struct {
+	channel, number, value: u8,
 }
 
-Midi_Event :: struct {
-	kind:     Midi_Event_Kind,
-	channel:  u8,
-	note:     u8,
-	velocity: u8,
+Midi_Event :: union {
+	Midi_Note_On,
+	Midi_Note_Off,
+	Midi_CC,
 }

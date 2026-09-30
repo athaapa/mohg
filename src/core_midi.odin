@@ -77,23 +77,44 @@ fill_midi_queue :: proc "c" (event_list: ^MIDIEventList, cntxt: rawptr, source_c
 			status := u8((word >> 16) & 0xff)
 			kind := status & 0xf0
 			channel := status & 0x0f
-			note := u8((word >> 8) & 0x7f)
-			velocity := u8(word & 0x7f)
 
+			event: Midi_Event
 
-			event := Midi_Event {
-				kind     = Midi_Event_Kind.Note_Off,
-				channel  = channel,
-				note     = note,
-				velocity = velocity,
-			}
 			switch kind {
 			case 0x80:
-				event.kind = .Note_Off
+				{
+					note := u8((word >> 8) & 0x7f)
+					velocity := u8(word & 0x7f)
+
+					event = Midi_Note_Off {
+						channel  = channel,
+						note     = note,
+						velocity = velocity,
+					}
+				}
 
 			case 0x90:
-				event.kind = velocity == 0 ? .Note_Off : .Note_On
+				{
+					note := u8((word >> 8) & 0x7f)
+					velocity := u8(word & 0x7f)
 
+					event = Midi_Note_On {
+						channel  = channel,
+						note     = note,
+						velocity = velocity,
+					}
+				}
+			case 0xB0:
+				{
+					cc_num := u8((word >> 8) & 0x7f)
+					value := u8(word & 0x7f)
+
+					event = Midi_CC {
+						channel = channel,
+						number  = cc_num,
+						value   = value,
+					}
+				}
 			case:
 				continue
 			}
@@ -173,6 +194,6 @@ midi_input_init :: proc(
 	return connected ? 0 : 1
 }
 
+// TODO: Destroy midi
 midi_input_destroy :: proc() {
-	// destroy midi
 }
