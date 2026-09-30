@@ -1,6 +1,7 @@
 package mohg
 
 import "core:math"
+
 ADSR_Config :: struct {
 	attack_seconds:  f64,
 	decay_seconds:   f64,
@@ -16,32 +17,59 @@ Synth :: struct {
 	voices:        ^Voices,
 	unison_count:  u8,
 	detune_cents:  f64,
+	rng:           RNG,
 }
 
 synth_process_midi :: proc "contextless" (
 	synth: ^Synth,
-	queue: ^Spsc_Queue(Midi_Event, MIDI_QUEUE_CAPACITY),
+	midi_queue: ^Spsc_Queue(Midi_Event, MIDI_QUEUE_CAPACITY),
+	parameter_queue: ^Spsc_Queue(Parameter_Event, PARAMETER_QUEUE_CAPACITY),
 ) {
 	for {
-		event, ok := spsc_try_pop(queue)
+		event, ok := spsc_try_pop(midi_queue)
 		if !ok {
 			break
 		}
 
-		switch event.kind {
-		case .Note_On:
+		switch e in event {
+		case Midi_Note_On:
 			{
-				voice, stolen := note_on(synth.voices, synth.max_voices, event.note)
+				voice, stolen := note_on(synth.voices, synth.max_voices, e.note)
 				if (!stolen) {
 					voice.left_ladder_filter = synth.ladder_filter
 					voice.right_ladder_filter = synth.ladder_filter
 					ladder_filter_reset(&voice.left_ladder_filter)
 					ladder_filter_reset(&voice.right_ladder_filter)
 				}
+
+				for i in 0 ..< synth.unison_count {
+					voice.oscillators[i].phase = f64(random_f64(&synth.rng))
+				}
 			}
-		case .Note_Off:
+		case Midi_Note_Off:
 			{
-				note_off(synth.voices, event.note)
+				note_off(synth.voices, e.note)
+			}
+		case Midi_CC:
+			{
+				if (e.number == 74) { 	// cutoff
+					t := f32(e.value) / 127
+					param_event := Ladder_Filter_Cutoff_Event {
+						cutoff_hz = LADDER_MIN_CUTOFF * math.pow(
+							(LADDER_MAX_CUTOFF / LADDER_MIN_CUTOFF),
+							t,
+						),
+					}
+
+					_ = spsc_try_push(parameter_queue, param_event)
+				} else if (e.number == 71) { 	// resonance
+					param_event := Ladder_Filter_Resonance_Event {
+						resonance = f32(e.value) / 127,
+					}
+
+					_ = spsc_try_push(parameter_queue, param_event)
+				}
+
 			}
 		}
 	}
@@ -95,7 +123,7 @@ synth_render :: proc "contextless" (
 				// update the sample
 				osc := &voice.oscillators[osc_idx]
 				osc_sample :=
-					0.2 * voice.current_amplitude * generate_triangle_wave(osc.phase, phase_step)
+					0.2 * voice.current_amplitude * generate_saw_wave(osc.phase, phase_step)
 
 				left_voice_sample += f32(left_gain * osc_sample)
 				right_voice_sample += f32(right_gain * osc_sample)
@@ -113,13 +141,11 @@ synth_render :: proc "contextless" (
 			left_voice_sample /= f32(synth.unison_count)
 			right_voice_sample /= f32(synth.unison_count)
 
-			/*
 			left_voice_sample = ladder_filter_process(&voice.left_ladder_filter, left_voice_sample)
 			right_voice_sample = ladder_filter_process(
 				&voice.right_ladder_filter,
 				right_voice_sample,
 			)
-            */
 
 			new_state: ADSR_State
 			switch voice.state {

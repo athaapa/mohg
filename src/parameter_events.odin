@@ -17,7 +17,6 @@ Parameter_Event :: union {
 	Ladder_Filter_Resonance_Event,
 }
 
-// TODO: Update all active voices with these parameters
 process_parameter_events :: proc "contextless" (
 	synth: ^Synth,
 	queue: ^Spsc_Queue(Parameter_Event, PARAMETER_QUEUE_CAPACITY),
@@ -38,6 +37,20 @@ process_parameter_events :: proc "contextless" (
 				synth.ladder_filter.cutoff_hz,
 				e.resonance,
 			)
+		}
+
+		for i in 0 ..< synth.voices.voice_count {
+			ladder_filter_set_parameters(
+				&synth.voices.voices[i].left_ladder_filter,
+				synth.ladder_filter.cutoff_hz,
+				synth.ladder_filter.resonance,
+			)
+			ladder_filter_set_parameters(
+				&synth.voices.voices[i].right_ladder_filter,
+				synth.ladder_filter.cutoff_hz,
+				synth.ladder_filter.resonance,
+			)
+
 		}
 	}
 }
