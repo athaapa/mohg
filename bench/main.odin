@@ -29,16 +29,14 @@ main :: proc() {
 	mohg.ladder_filter_set_sample_rate(&synth.ladder_filter, f32(SAMPLE_RATE))
 	mohg.ladder_filter_set_parameters(&synth.ladder_filter, 7_000, 0.6)
 
-	queue := mohg.Spsc_Queue(mohg.Midi_Event, mohg.MIDI_QUEUE_CAPACITY){}
+	midi_queue := mohg.Spsc_Queue(mohg.Midi_Event, mohg.MIDI_QUEUE_CAPACITY){}
+	parameter_queue := mohg.Spsc_Queue(mohg.Parameter_Event, mohg.PARAMETER_QUEUE_CAPACITY){}
 	for i in 0 ..< VOICE_COUNT {
-		if !mohg.spsc_try_push(
-			&queue,
-			mohg.Midi_Event{kind = .Note_On, note = u8(48 + i), velocity = 100},
-		) {
+		if !mohg.spsc_try_push(&midi_queue, mohg.Midi_Note_On{note = u8(48 + i), velocity = 100}) {
 			panic("MIDI queue filled during benchmark setup")
 		}
 	}
-	mohg.synth_process_midi(&synth, &queue)
+	mohg.synth_process_midi(&synth, &midi_queue, &parameter_queue)
 	assert(voices.voice_count == VOICE_COUNT)
 
 	samples: [FRAME_COUNT * CHANNEL_COUNT]f32
