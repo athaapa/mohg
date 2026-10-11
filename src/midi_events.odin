@@ -3,7 +3,7 @@ package mohg
 // MIDI event transport: the event type that crosses from the CoreMIDI
 // thread to the audio thread.
 
-MIDI_QUEUE_CAPACITY :: 64
+MIDI_QUEUE_CAPACITY :: 512
 
 Midi_Note_On :: struct {
 	channel, note, velocity: u8,
