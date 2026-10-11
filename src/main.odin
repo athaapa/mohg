@@ -22,10 +22,14 @@ main :: proc() {
 			attack_seconds = 0.05,
 			decay_seconds = 0.25,
 			sustain_level = 1,
-			release_seconds = 0.1,
+			release_seconds = 0.15,
 		},
 		ladder_filter = Ladder_Filter{},
 		voices = &voices,
+		max_voices = 4,
+		unison_count = 1,
+		detune_cents = 15,
+		rng = RNG{state = 123456789},
 	}
 
 	midi: Midi_Input
@@ -47,10 +51,9 @@ main :: proc() {
 
 	unit: AudioUnit
 	audio_init(&engine, &unit)
-	render_metrics_init(&engine.render_metrics, timebase, engine.synth.sample_rate)
 
 	ladder_filter_set_sample_rate(&engine.synth.ladder_filter, f32(engine.synth.sample_rate))
-	ladder_filter_set_parameters(&engine.synth.ladder_filter, 1_000, 0.6)
+	ladder_filter_set_parameters(&engine.synth.ladder_filter, 10_000, 0, 0.5)
 
 	// start
 	status = AudioOutputUnitStart(unit)
@@ -64,5 +67,4 @@ main :: proc() {
 
 	audio_destroy(&unit)
 	log_drain(engine.log_queue)
-	render_metrics_print(&engine.render_metrics)
 }

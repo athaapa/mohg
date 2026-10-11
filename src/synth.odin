@@ -68,6 +68,12 @@ synth_process_midi :: proc "contextless" (
 					}
 
 					_ = spsc_try_push(parameter_queue, param_event)
+				} else if (e.number == 76) { 	// drive
+					param_event := Ladder_Filter_Drive_Event {
+						drive = f32(e.value) / 127,
+					}
+
+					_ = spsc_try_push(parameter_queue, param_event)
 				}
 
 			}
@@ -122,8 +128,7 @@ synth_render :: proc "contextless" (
 
 				// update the sample
 				osc := &voice.oscillators[osc_idx]
-				osc_sample :=
-					0.2 * voice.current_amplitude * generate_saw_wave(osc.phase, phase_step)
+				osc_sample := 0.4 * voice.current_amplitude * generate_sine_wave(osc.phase)
 
 				left_voice_sample += f32(left_gain * osc_sample)
 				right_voice_sample += f32(right_gain * osc_sample)
@@ -146,6 +151,7 @@ synth_render :: proc "contextless" (
 				&voice.right_ladder_filter,
 				right_voice_sample,
 			)
+
 
 			new_state: ADSR_State
 			switch voice.state {

@@ -12,9 +12,14 @@ Ladder_Filter_Resonance_Event :: struct {
 	resonance: f32,
 }
 
+Ladder_Filter_Drive_Event :: struct {
+	drive: f32,
+}
+
 Parameter_Event :: union {
 	Ladder_Filter_Cutoff_Event,
 	Ladder_Filter_Resonance_Event,
+	Ladder_Filter_Drive_Event,
 }
 
 process_parameter_events :: proc "contextless" (
@@ -29,6 +34,7 @@ process_parameter_events :: proc "contextless" (
 				&synth.ladder_filter,
 				e.cutoff_hz,
 				synth.ladder_filter.resonance,
+				synth.ladder_filter.drive,
 			)
 
 		case Ladder_Filter_Resonance_Event:
@@ -36,6 +42,14 @@ process_parameter_events :: proc "contextless" (
 				&synth.ladder_filter,
 				synth.ladder_filter.cutoff_hz,
 				e.resonance,
+				synth.ladder_filter.drive,
+			)
+		case Ladder_Filter_Drive_Event:
+			ladder_filter_set_parameters(
+				&synth.ladder_filter,
+				synth.ladder_filter.cutoff_hz,
+				synth.ladder_filter.resonance,
+				e.drive,
 			)
 		}
 
@@ -44,11 +58,13 @@ process_parameter_events :: proc "contextless" (
 				&synth.voices.voices[i].left_ladder_filter,
 				synth.ladder_filter.cutoff_hz,
 				synth.ladder_filter.resonance,
+				synth.ladder_filter.drive,
 			)
 			ladder_filter_set_parameters(
 				&synth.voices.voices[i].right_ladder_filter,
 				synth.ladder_filter.cutoff_hz,
 				synth.ladder_filter.resonance,
+				synth.ladder_filter.drive,
 			)
 
 		}

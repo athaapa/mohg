@@ -2,18 +2,28 @@ package mohg
 
 import "core:math"
 
-LADDER_MIN_CUTOFF :: 20
-LADDER_MAX_CUTOFF :: 20_000
+LADDER_MAX_CUTOFF :: 24_000
+LADDER_MIN_CUTOFF :: 600
+
+LADDER_MIN_RESONANCE :: 0
+LADDER_MAX_RESONANCE :: 1.0
+
+LADDER_MAX_DRIVE :: 8
+LADDER_MIN_DRIVE :: 0.1
+
 TOLERANCE: f32 : 1e-6
 MAX_ITERATIONS :: 8
 
 
 Ladder_Filter :: struct {
-	sample_rate: f32,
-	cutoff_hz:   f32,
-	resonance:   f32,
-	stage:       [4]f32,
-	G:           f32,
+	sample_rate:     f32,
+	cutoff_hz:       f32,
+	resonance:       f32,
+	stage:           [4]f32,
+	G:               f32,
+	last_iterations: int,
+	last_residual:   f32,
+	drive:           f32,
 }
 
 ladder_filter_set_sample_rate :: proc "contextless" (filter: ^Ladder_Filter, sample_rate: f32) {
@@ -31,14 +41,12 @@ ladder_filter_set_parameters :: proc "contextless" (
 	filter: ^Ladder_Filter,
 	cutoff_hz: f32,
 	resonance: f32,
+	drive: f32,
 ) {
-	max_cutoff := filter.sample_rate * 0.45
-	if max_cutoff < 1.0 {
-		max_cutoff = 1.0
-	}
 
-	filter.cutoff_hz = math.clamp(cutoff_hz, 1.0, max_cutoff)
-	filter.resonance = math.clamp(resonance, 0.0, 1.0)
+	filter.cutoff_hz = math.clamp(cutoff_hz, LADDER_MIN_CUTOFF, LADDER_MAX_CUTOFF)
+	filter.resonance = math.clamp(resonance, LADDER_MIN_RESONANCE, LADDER_MAX_RESONANCE)
+	filter.drive = math.clamp(drive, LADDER_MIN_DRIVE, LADDER_MAX_DRIVE)
 	ladder_filter_calculate_coefficients(filter)
 }
 
@@ -79,6 +87,8 @@ ladder_filter_process :: proc "contextless" (filter: ^Ladder_Filter, input: f32)
 		return input
 	}
 
+	input := input * filter.drive
+
 	k := filter.resonance * 4.0
 
 	S := ladder_calculate_state_contribution(filter)
@@ -87,11 +97,14 @@ ladder_filter_process :: proc "contextless" (filter: ^Ladder_Filter, input: f32)
 
 	u := (input - k * S) / (1.0 + k * g4)
 
-	for _ in 0 ..< MAX_ITERATIONS {
+	for i in 0 ..< MAX_ITERATIONS {
 		u_tanh := math.tanh(u)
 		u = u - (u + k * (A * u_tanh + S) - input) / (1 + k * A * (1 - u_tanh * u_tanh))
 		u_tanh = math.tanh(u)
 		F_u := u + k * (A * u_tanh + S) - input
+
+		filter.last_iterations = i + 1
+		filter.last_residual = math.abs(F_u)
 		if (math.abs(F_u) < TOLERANCE) {
 			break
 		}
@@ -101,6 +114,9 @@ ladder_filter_process :: proc "contextless" (filter: ^Ladder_Filter, input: f32)
 	s2 := ladder_filter_process_stage(filter, s1, 1)
 	s3 := ladder_filter_process_stage(filter, s2, 2)
 	s4 := ladder_filter_process_stage(filter, s3, 3)
+
+
+	s4 /= filter.drive
 
 	return s4
 }
