@@ -8,7 +8,6 @@ Engine :: struct {
 	midi_event_queue:      ^Spsc_Queue(Midi_Event, MIDI_QUEUE_CAPACITY),
 	parameter_event_queue: ^Spsc_Queue(Parameter_Event, PARAMETER_QUEUE_CAPACITY),
 	log_queue:             ^Log_Queue,
-	render_metrics:        Render_Metrics,
 }
 
 render :: proc "c" (
@@ -34,7 +33,6 @@ render :: proc "c" (
 	synth_render(synth, synth.voices, samples, int(inNumberFrames), channel_count)
 
 	elapsed := mach_absolute_time() - start
-	render_metrics_record(&engine.render_metrics, elapsed, inNumberFrames)
 
 	return 0
 }
