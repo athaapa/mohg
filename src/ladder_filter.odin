@@ -11,22 +11,22 @@ LADDER_MAX_RESONANCE :: 1.0
 LADDER_MAX_DRIVE :: 8
 LADDER_MIN_DRIVE :: 0.1
 
-TOLERANCE: f32 : 1e-6
+TOLERANCE: f64 : 1e-6
 MAX_ITERATIONS :: 8
 
 
 Ladder_Filter :: struct {
-	sample_rate:     f32,
-	cutoff_hz:       f32,
-	resonance:       f32,
-	stage:           [4]f32,
-	G:               f32,
+	sample_rate:     f64,
+	cutoff_hz:       f64,
+	resonance:       f64,
+	stage:           [4]f64,
+	G:               f64,
 	last_iterations: int,
-	last_residual:   f32,
-	drive:           f32,
+	last_residual:   f64,
+	drive:           f64,
 }
 
-ladder_filter_set_sample_rate :: proc "contextless" (filter: ^Ladder_Filter, sample_rate: f32) {
+ladder_filter_set_sample_rate :: proc "contextless" (filter: ^Ladder_Filter, sample_rate: f64) {
 	filter.sample_rate = math.max(sample_rate, 0)
 	ladder_filter_calculate_coefficients(filter)
 }
@@ -39,9 +39,9 @@ ladder_filter_calculate_coefficients :: proc "contextless" (filter: ^Ladder_Filt
 
 ladder_filter_set_parameters :: proc "contextless" (
 	filter: ^Ladder_Filter,
-	cutoff_hz: f32,
-	resonance: f32,
-	drive: f32,
+	cutoff_hz: f64,
+	resonance: f64,
+	drive: f64,
 ) {
 
 	filter.cutoff_hz = math.clamp(cutoff_hz, LADDER_MIN_CUTOFF, LADDER_MAX_CUTOFF)
@@ -51,14 +51,14 @@ ladder_filter_set_parameters :: proc "contextless" (
 }
 
 ladder_filter_reset :: proc "contextless" (filter: ^Ladder_Filter) {
-	filter.stage = [4]f32{}
+	filter.stage = [4]f64{}
 }
 
 ladder_filter_process_stage :: proc "contextless" (
 	filter: ^Ladder_Filter,
-	input: f32,
+	input: f64,
 	stage: int,
-) -> f32 {
+) -> f64 {
 	G := filter.G
 
 	v := (input - filter.stage[stage]) * G
@@ -69,7 +69,7 @@ ladder_filter_process_stage :: proc "contextless" (
 	return out
 }
 
-ladder_calculate_state_contribution :: proc "contextless" (filter: ^Ladder_Filter) -> f32 {
+ladder_calculate_state_contribution :: proc "contextless" (filter: ^Ladder_Filter) -> f64 {
 	G := filter.G
 	omG := 1.0 - G
 
@@ -82,7 +82,7 @@ ladder_calculate_state_contribution :: proc "contextless" (filter: ^Ladder_Filte
 	)
 }
 
-ladder_filter_process :: proc "contextless" (filter: ^Ladder_Filter, input: f32) -> f32 {
+ladder_filter_process :: proc "contextless" (filter: ^Ladder_Filter, input: f64) -> f64 {
 	if filter.sample_rate <= 0 {
 		return input
 	}
