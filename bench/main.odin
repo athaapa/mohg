@@ -39,6 +39,8 @@ Options :: struct {
 	unison, frames, blocks, warmup: int,
 	cutoff, resonance, drive, frequency: f64,
 	samples, width: int,
+	waveform: mohg.Waveform,
+	oversampling: int,
 }
 
 default_options :: proc(command: string) -> Options {
@@ -49,6 +51,7 @@ default_options :: proc(command: string) -> Options {
 		resonance = math.clamp(0.9, MIN_RESONANCE, MAX_RESONANCE),
 		drive = math.clamp(1.0, MIN_DRIVE, MAX_DRIVE),
 		frequency = 5000, samples = 16384, width = 80,
+		waveform = .SINE, oversampling = 1,
 	}
 	if command == "alias" {
 		opts.cutoff = math.clamp(20000.0, MIN_CUTOFF, MAX_CUTOFF)
@@ -71,6 +74,7 @@ render  Offline synth render timing (defaults to %v voices, %v unison)
   --voices N       %v..%v voices (default %v)
   --sweep          Run 16/32/64/128 voices instead; cannot combine with --voices
   --unison N       %v..%v oscillators per voice (default %v)
+  --oversampling N  1, 2, 4, 8, 16 (default 1)
   --frames N       %v..%v frames per block (default %v)
   --blocks N       %v..%v measured blocks (default %v)
   --warmup N       %v..%v warmup blocks (default %v)
@@ -78,11 +82,13 @@ render  Offline synth render timing (defaults to %v voices, %v unison)
   --resonance R    %v..%v (default %v)
   --drive D        %v..%v (default %v)
 
-alias   Sine through the nonlinear ladder; ASCII frequency spectra and folds
+alias   Full synth render; ASCII frequency spectra and candidate folds
+  --waveform W    sine, saw, square, triangle (default sine)
+  --oversampling N  1, 2, 4, 8, 16 (default 1)
   --cutoff HZ      Filter cutoff (default %v)
   --resonance R    %v..%v (default %v)
   --drive D        %v..%v, applied by the filter (default %v)
-  --frequency HZ  Test sine frequency (default %v; snapped to an FFT bin)
+  --frequency HZ  Oscillator frequency (default %v; snapped to an FFT bin)
   --samples N     Power of two, %v..%v (default %v)
   --width N       Spectrum columns, %v..%v (default %v)
 
@@ -134,6 +140,21 @@ parse_options :: proc(args: []string) -> (opts: Options, err: string) {
 		if seen[name] { return opts, fmt.tprintf("duplicate option %s", name) }
 		seen[name] = true
 		switch name {
+		case "--waveform":
+			if opts.command != "alias" { return opts, "--waveform is only available for alias" }
+			switch value {
+			case "sine": opts.waveform = .SINE
+			case "saw": opts.waveform = .SAW
+			case "square": opts.waveform = .SQUARE
+			case "triangle": opts.waveform = .TRIANGLE
+			case: return opts, "--waveform must be sine, saw, square, or triangle"
+			}
+		case "--oversampling":
+			n, ok := strconv.parse_int(value, 10)
+			if !ok || (n != 1 && n != 2 && n != 4 && n != 8 && n != 16) {
+				return opts, "--oversampling must be 1, 2, 4, 8, or 16"
+			}
+			opts.oversampling = n
 		case "--cutoff", "--resonance", "--drive", "--frequency":
 			if name == "--frequency" && opts.command != "alias" {
 				return opts, "--frequency is only available for alias"

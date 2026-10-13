@@ -25,14 +25,19 @@ render_benchmark :: proc(opts: Options, voice_count: int) -> Render_Timing {
 		unison_count = u8(opts.unison),
 		detune_cents = 15,
 		rng = mohg.RNG{state = 1}, // Repeatable phases, with a nonzero RNG seed.
+		waveform = mohg.Waveform.SAW,
+		oversampling_factor = u8(opts.oversampling),
 	}
-	mohg.ladder_filter_set_sample_rate(&synth.ladder_filter, SAMPLE_RATE)
+	mohg.ladder_filter_set_sample_rate(&synth.ladder_filter, SAMPLE_RATE * f64(opts.oversampling))
 	mohg.ladder_filter_set_parameters(
 		&synth.ladder_filter,
-		f32(opts.cutoff),
-		f32(opts.resonance),
-		f32(opts.drive),
+		f64(opts.cutoff),
+		f64(opts.resonance),
+		f64(opts.drive),
 	)
+	// synth_render now includes decimation even at factor 1.
+	mohg.decimator_init(&synth.left_decimator, synth.oversampling_factor, synth.sample_rate)
+	mohg.decimator_init(&synth.right_decimator, synth.oversampling_factor, synth.sample_rate)
 	midi_queue := mohg.Spsc_Queue(mohg.Midi_Event, mohg.MIDI_QUEUE_CAPACITY){}
 	parameter_queue := mohg.Spsc_Queue(mohg.Parameter_Event, mohg.PARAMETER_QUEUE_CAPACITY){}
 	for i in 0 ..< voice_count {
@@ -77,8 +82,9 @@ render_benchmark :: proc(opts: Options, voice_count: int) -> Render_Timing {
 
 run_render :: proc(opts: Options) {
 	fmt.printfln(
-		"Offline render: %v Hz, %v unison, %v frames, %v warmup blocks, %v measured blocks",
+		"Offline render: %v Hz output, %vx oversampling, %v unison, %v frames, %v warmup blocks, %v measured blocks",
 		SAMPLE_RATE,
+		opts.oversampling,
 		opts.unison,
 		opts.frames,
 		opts.warmup,
@@ -96,8 +102,15 @@ run_render :: proc(opts: Options) {
 		deadline_us,
 	)
 	fmt.println("\nBlock timings in us; mean/frame is us per frame.")
-	fmt.printfln("%6s %12s %12s %12s %12s %10s",
-		"Voices", "Mean/block", "p50/block", "p99/block", "Mean/frame", "Budget %")
+	fmt.printfln(
+		"%6s %12s %12s %12s %12s %10s",
+		"Voices",
+		"Mean/block",
+		"p50/block",
+		"p99/block",
+		"Mean/frame",
+		"Budget %",
+	)
 	fmt.println("------ ------------ ------------ ------------ ------------ ----------")
 	counts := []int{opts.voices}
 	if opts.sweep {counts = []int{16, 32, 64, 128}}

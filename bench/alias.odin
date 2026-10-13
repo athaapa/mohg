@@ -11,12 +11,6 @@ SPECTRUM_FLOOR_DB :: -100.0
 FFT_Value :: struct {
 	re, im: f64,
 }
-Solver_Stats :: struct {
-	max_iterations:   int,
-	total_iterations: i64,
-	failures:         int,
-	worst_residual:   f32,
-}
 
 // Radix-2 forward FFT. No allocations or normalization inside the transform.
 fft :: proc(data: []FFT_Value) {
@@ -51,7 +45,7 @@ fft :: proc(data: []FFT_Value) {
 
 // One-sided peak amplitudes with periodic Hann window/coherent-gain correction.
 // An on-bin sine of peak amplitude 1 reads 0 dBFS. DC/Nyquist are not doubled.
-spectrum :: proc(samples: []f32) -> []f64 {
+spectrum :: proc(samples: []f64) -> []f64 {
 	n := len(samples)
 	data := make([]FFT_Value, n)
 	defer delete(data)
@@ -76,45 +70,61 @@ amplitude_db :: proc(amplitude: f64) -> f64 {
 
 // Both captures have the same duration and frequency spacing. Keeping the
 // same integer tone bin at 8x gives exactly the same input frequency in Hz.
-capture_filter :: proc(
-	opts: Options,
-	factor, tone_bin: int,
-) -> (
-	samples: []f32,
-	stats: Solver_Stats,
-	ok: bool,
-) {
+capture_synth :: proc(opts: Options, factor, tone_bin: int) -> (samples: []f64, ok: bool) {
 	rate := SAMPLE_RATE * factor
 	n := opts.samples * factor
 	frequency := f64(tone_bin) * SAMPLE_RATE / f64(opts.samples)
-	filter := mohg.Ladder_Filter{}
-	mohg.ladder_filter_set_sample_rate(&filter, f32(rate))
-	mohg.ladder_filter_set_parameters(
-		&filter,
-		f32(opts.cutoff),
-		f32(opts.resonance),
-		f32(opts.drive),
-	)
-	samples = make([]f32, n)
-	warmup := rate / 10
-	for i in 0 ..< warmup + n {
-		// Unit-peak sine. Drive is applied exactly once, inside ladder_filter_process.
-		x := f32(math.sin(2 * math.PI * frequency * f64(i) / f64(rate)))
-		y := mohg.ladder_filter_process(&filter, x)
-		if math.is_nan(y) ||
-		   math.is_inf(y) ||
-		   math.is_nan(filter.last_residual) ||
-		   math.is_inf(filter.last_residual) {
-			return samples, stats, false
-		}
-		if i < warmup {continue}
-		samples[i - warmup] = y
-		stats.max_iterations = max(stats.max_iterations, filter.last_iterations)
-		stats.total_iterations += i64(filter.last_iterations)
-		stats.worst_residual = max(stats.worst_residual, filter.last_residual)
-		if filter.last_residual >= mohg.TOLERANCE {stats.failures += 1}
+	voices := mohg.Voices{}
+	synth := mohg.Synth {
+		sample_rate = f64(rate),
+		voices = &voices,
+		max_voices = 1,
+		unison_count = 1,
+		waveform = opts.waveform,
+		oversampling_factor = u8(opts.oversampling),
+		adsr_config = mohg.ADSR_Config {
+			attack_seconds = 0.025,
+			decay_seconds = 0.025,
+			sustain_level = 1,
+			release_seconds = 0.1,
+		},
+		rng = mohg.RNG{state = 1},
 	}
-	return samples, stats, true
+	mohg.ladder_filter_set_sample_rate(&synth.ladder_filter, f64(rate * opts.oversampling))
+	mohg.ladder_filter_set_parameters(
+		&synth.ladder_filter,
+		opts.cutoff,
+		opts.resonance,
+		opts.drive,
+	)
+	mohg.decimator_init(&synth.left_decimator, synth.oversampling_factor, synth.sample_rate)
+	mohg.decimator_init(&synth.right_decimator, synth.oversampling_factor, synth.sample_rate)
+	midi := mohg.Spsc_Queue(mohg.Midi_Event, mohg.MIDI_QUEUE_CAPACITY){}
+	parameters := mohg.Spsc_Queue(mohg.Parameter_Event, mohg.PARAMETER_QUEUE_CAPACITY){}
+	assert(mohg.spsc_try_push(&midi, mohg.Midi_Note_On{note = 69, velocity = 100}))
+	mohg.synth_process_midi(&synth, &midi, &parameters)
+	// Exact FFT-bin tuning avoids confusing leakage with aliasing. All signal
+	// generation after this setup goes through the production renderer.
+	voices.voices[0].frequency = frequency
+	samples = make([]f64, n)
+	warmup := rate / 10
+	buffer: [64 * CHANNEL_COUNT]f32
+	position := 0
+	for position < warmup + n {
+		frames := min(64, warmup + n - position)
+		mohg.synth_render(&synth, &voices, raw_data(buffer[:]), frames, CHANNEL_COUNT)
+		for frame in 0 ..< frames {
+			left := f64(buffer[frame * CHANNEL_COUNT])
+			right := f64(buffer[frame * CHANNEL_COUNT + 1])
+			if math.is_nan(left) || math.is_inf(left) || math.is_nan(right) || math.is_inf(right) {
+				return samples, false
+			}
+			index := position + frame - warmup
+			if index >= 0 {samples[index] = left}
+		}
+		position += frames
+	}
+	return samples, true
 }
 
 // Linear Hz x-axis. Each column preserves the strongest FFT bin in its range;
@@ -160,24 +170,29 @@ run_alias :: proc(opts: Options) {
 	bin_hz := f64(SAMPLE_RATE) / f64(opts.samples)
 	frequency := f64(tone_bin) * bin_hz
 	fmt.printfln(
-		"Alias experiment: %.3f Hz sine (requested %.3f Hz), %v Hz sample rate",
+		"Synth alias experiment: %.3f Hz %v (requested %.3f Hz), %v Hz output rate",
 		frequency,
+		opts.waveform,
 		opts.frequency,
 		SAMPLE_RATE,
 	)
 	fmt.printfln(
-		"Filter: %.1f Hz cutoff, %.3f resonance, %.3f drive; unit-peak input sine",
+		"Filter: %.1f Hz cutoff, %.3f resonance, %.3f drive",
 		opts.cutoff,
 		opts.resonance,
 		opts.drive,
 	)
+	fmt.printfln(
+		"One sustained voice, one oscillator, %vx internal oversampling; left-channel output",
+		opts.oversampling,
+	)
 	fmt.printfln("%v samples, %.3f Hz/bin, Hann window; 0.1 s warmup", opts.samples, bin_hz)
-	base, base_stats, base_ok := capture_filter(opts, 1, tone_bin)
+	base, base_ok := capture_synth(opts, 1, tone_bin)
 	defer delete(base)
-	ref, ref_stats, ref_ok := capture_filter(opts, REFERENCE_FACTOR, tone_bin)
+	ref, ref_ok := capture_synth(opts, REFERENCE_FACTOR, tone_bin)
 	defer delete(ref)
 	if !base_ok || !ref_ok {
-		fmt.fprintln(os.stderr, "error: filter produced non-finite output or residual")
+		fmt.fprintln(os.stderr, "error: synth produced non-finite output")
 		os.exit(1)
 	}
 	base_amps := spectrum(base)
@@ -190,12 +205,26 @@ run_alias :: proc(opts: Options) {
 		bin_hz,
 		opts.width,
 	)
-	print_spectrum("8x reference, shown only below 24 kHz", ref_amps, bin_hz, opts.width)
+	print_spectrum(
+		"384 kHz synth reference, shown only below 24 kHz",
+		ref_amps,
+		bin_hz,
+		opts.width,
+	)
+	fmt.println("\nFold locations below are candidates, not isolated alias measurements.")
+	fmt.println(
+		"stopband = above output Nyquist after folding at the internal rate; FIR attenuation applies.",
+	)
 	fmt.println("\n   h    true Hz   lands Hz  kind       48k dBFS   ref dBFS")
-	for h := 1; h <= 15; h += 2 {
+	harmonic_step := 2
+	if opts.waveform == .SAW {harmonic_step = 1}
+	for h := 1; h <= 15; h += harmonic_step {
 		true_bin := h * tone_bin
-		lands := fold_bin(true_bin, opts.samples)
-		kind := true_bin <= opts.samples / 2 ? "harmonic" : "alias"
+		internal_lands := fold_bin(true_bin, opts.samples * opts.oversampling)
+		lands := fold_bin(internal_lands, opts.samples)
+		kind := "harmonic"
+		if true_bin > opts.samples / 2 {kind = "alias"}
+		if internal_lands > opts.samples / 2 {kind = "stopband"}
 		if kind == "alias" && lands % tone_bin == 0 {kind = "overlap"}
 		fmt.printfln(
 			"%4s %10s %10s  %-8s %10s %10s",
@@ -207,20 +236,4 @@ run_alias :: proc(opts: Options) {
 			fmt.tprintf("%.1f", amplitude_db(ref_amps[lands])),
 		)
 	}
-	fmt.printfln(
-		"\n48k solver: max %v iterations, mean %.2f, worst residual %.3e, tolerance failures %v/%v",
-		base_stats.max_iterations,
-		f64(base_stats.total_iterations) / f64(len(base)),
-		base_stats.worst_residual,
-		base_stats.failures,
-		len(base),
-	)
-	fmt.printfln(
-		"8x solver:  max %v iterations, mean %.2f, worst residual %.3e, tolerance failures %v/%v",
-		ref_stats.max_iterations,
-		f64(ref_stats.total_iterations) / f64(len(ref)),
-		ref_stats.worst_residual,
-		ref_stats.failures,
-		len(ref),
-	)
 }
