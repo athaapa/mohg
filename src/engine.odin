@@ -7,7 +7,6 @@ Engine :: struct {
 	synth:                 Synth,
 	midi_event_queue:      ^Spsc_Queue(Midi_Event, MIDI_QUEUE_CAPACITY),
 	parameter_event_queue: ^Spsc_Queue(Parameter_Event, PARAMETER_QUEUE_CAPACITY),
-	log_queue:             ^Log_Queue,
 }
 
 render :: proc "c" (
