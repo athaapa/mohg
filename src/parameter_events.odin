@@ -6,14 +6,14 @@ package mohg
 PARAMETER_QUEUE_CAPACITY :: 512
 
 Ladder_Filter_Cutoff_Event :: struct {
-	cutoff_hz: f32,
+	cutoff_hz: f64,
 }
 Ladder_Filter_Resonance_Event :: struct {
-	resonance: f32,
+	resonance: f64,
 }
 
 Ladder_Filter_Drive_Event :: struct {
-	drive: f32,
+	drive: f64,
 }
 
 Parameter_Event :: union {
