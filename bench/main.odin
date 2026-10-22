@@ -41,6 +41,7 @@ Options :: struct {
 	samples, width: int,
 	waveform: mohg.Waveform,
 	oversampling: int,
+	baseline_blocks: int,
 }
 
 default_options :: proc(command: string) -> Options {
@@ -51,12 +52,16 @@ default_options :: proc(command: string) -> Options {
 		resonance = math.clamp(0.9, MIN_RESONANCE, MAX_RESONANCE),
 		drive = math.clamp(1.0, MIN_DRIVE, MAX_DRIVE),
 		frequency = 5000, samples = 16384, width = 80,
-		waveform = .SINE, oversampling = 1,
+		waveform = .SINE, oversampling = 1, baseline_blocks = 50000,
 	}
 	if command == "alias" {
 		opts.cutoff = math.clamp(20000.0, MIN_CUTOFF, MAX_CUTOFF)
 		opts.resonance = MIN_RESONANCE
 		opts.drive = math.clamp(4.0, MIN_DRIVE, MAX_DRIVE)
+	}
+	if command == "scaling" {
+		opts.oversampling = 4
+		opts.blocks = 5000
 	}
 	return opts
 }
@@ -68,7 +73,7 @@ range_error :: proc(name: string, lower, upper: $T, suffix := "") -> string {
 usage :: proc() {
 	render := default_options("render")
 	alias := default_options("alias")
-	fmt.printfln(`Usage: build/bench <render|alias> [options]
+	fmt.printfln(`Usage: build/bench <render|alias|scaling> [options]
 
 render  Offline synth render timing (defaults to %v voices, %v unison)
   --voices N       %v..%v voices (default %v)
@@ -81,6 +86,13 @@ render  Offline synth render timing (defaults to %v voices, %v unison)
   --cutoff HZ      Filter cutoff (default %v)
   --resonance R    %v..%v (default %v)
   --drive D        %v..%v (default %v)
+
+scaling Render profiling sweeps; accepts render options except --sweep
+  --baseline-blocks N  Measured blocks for zero-voice runs (default 50000)
+  Defaults: 32 voices, 16 unison, 4x oversampling, 64 frames, 5000 blocks
+  Sweeps k=2/4/8/16, then n=8/16/32, then zero voices at two L values.
+  --voices and --unison set the fixed values in their respective sweeps.
+  k=1 is omitted because it takes the special non-unison branch.
 
 alias   Full synth render; ASCII frequency spectra and candidate folds
   --waveform W    sine, saw, square, triangle (default sine)
@@ -96,6 +108,7 @@ Cutoff range: %v..%v Hz at the fixed %v Hz sample rate.
 Use --help with either command. Options accept --name value or --name=value.
 Examples:
   build/bench render
+  build/bench scaling
   build/bench alias
   build/bench render --voices 32 --unison 8
   build/bench alias --cutoff %v --resonance %v --drive %v`,
@@ -115,8 +128,8 @@ Examples:
 }
 
 parse_options :: proc(args: []string) -> (opts: Options, err: string) {
-	if len(args) == 0 || (args[0] != "render" && args[0] != "alias") {
-		return {}, "expected subcommand 'render' or 'alias'"
+	if len(args) == 0 || (args[0] != "render" && args[0] != "alias" && args[0] != "scaling") {
+		return {}, "expected subcommand 'render', 'alias', or 'scaling'"
 	}
 	opts = default_options(args[0])
 	seen := make(map[string]bool)
@@ -140,6 +153,11 @@ parse_options :: proc(args: []string) -> (opts: Options, err: string) {
 		if seen[name] { return opts, fmt.tprintf("duplicate option %s", name) }
 		seen[name] = true
 		switch name {
+		case "--baseline-blocks":
+			if opts.command != "scaling" { return opts, "--baseline-blocks is only available for scaling" }
+			n, ok := strconv.parse_int(value, 10)
+			if !ok || n < MIN_BLOCKS || n > MAX_BLOCKS { return opts, range_error(name, MIN_BLOCKS, MAX_BLOCKS) }
+			opts.baseline_blocks = n
 		case "--waveform":
 			if opts.command != "alias" { return opts, "--waveform is only available for alias" }
 			switch value {
@@ -240,5 +258,6 @@ main :: proc() {
 	switch opts.command {
 	case "render": run_render(opts)
 	case "alias": run_alias(opts)
+	case "scaling": run_scaling(opts)
 	}
 }

@@ -6,11 +6,16 @@ import "core:slice"
 
 Render_Timing :: struct {
 	mean_us, p50_us, p99_us: f64,
+	deadline_misses:         int,
 }
 
-// Setup, warmup, and reporting are outside the timed region. This measures
-// back-to-back synth_render calls, not live audio scheduling or MIDI handling.
-render_benchmark :: proc(opts: Options, voice_count: int) -> Render_Timing {
+render_benchmark :: proc(
+	opts: Options,
+	voice_count: int,
+	phase: cstring = "render",
+) -> Render_Timing {
+	// Initialize logging outside both warmup and the measured interval.
+	signpost_log := mohg_bench_signpost_log()
 	voices := mohg.Voices{}
 	synth := mohg.Synth {
 		sample_rate = SAMPLE_RATE,
@@ -60,23 +65,41 @@ render_benchmark :: proc(opts: Options, voice_count: int) -> Render_Timing {
 	}
 	timebase: mohg.Mach_Timebase_Info
 	if mohg.mach_timebase_info(&timebase) != 0 {panic("mach_timebase_info failed")}
+	interval := mohg_bench_signpost_begin(
+		signpost_log,
+		phase,
+		i32(voice_count),
+		i32(opts.unison),
+		i32(opts.oversampling),
+		i32(opts.frames),
+		i32(opts.blocks),
+	)
 	for i in 0 ..< opts.blocks {
 		start := mohg.mach_absolute_time()
 		mohg.synth_render(&synth, raw_data(samples), opts.frames, CHANNEL_COUNT)
 		durations[i] = mohg.mach_absolute_time() - start
 	}
+	mohg_bench_signpost_end(signpost_log, interval)
 	// Summation and sorting happen after measurement. Percentiles use nearest
 	// rank: ceil(p * N) - 1, including when only one block is requested.
 	total_ticks: u64
-	for ticks in durations {total_ticks += ticks}
-	slice.sort(durations)
 	ticks_to_us := f64(timebase.numer) / f64(timebase.denom) / 1000
+	deadline_us := f64(opts.frames) / SAMPLE_RATE * 1e6
+	deadline_misses: int
+	for ticks in durations {
+		total_ticks += ticks
+		if f64(ticks) * ticks_to_us > deadline_us {
+			deadline_misses += 1
+		}
+	}
+	slice.sort(durations)
 	p50_index := (opts.blocks * 50 + 99) / 100 - 1
 	p99_index := (opts.blocks * 99 + 99) / 100 - 1
 	return Render_Timing {
 		mean_us = f64(total_ticks) / f64(opts.blocks) * ticks_to_us,
 		p50_us = f64(durations[p50_index]) * ticks_to_us,
 		p99_us = f64(durations[p99_index]) * ticks_to_us,
+		deadline_misses = deadline_misses,
 	}
 }
 
@@ -102,28 +125,31 @@ run_render :: proc(opts: Options) {
 		deadline_us,
 	)
 	fmt.println("\nBlock timings in us; mean/frame is us per frame.")
+	fmt.println("Misses = measured blocks exceeding the buffer budget, not live audio underruns.")
 	fmt.printfln(
-		"%6s %12s %12s %12s %12s %10s",
+		"%6s %12s %12s %12s %12s %10s %10s",
 		"Voices",
 		"Mean/block",
 		"p50/block",
 		"p99/block",
 		"Mean/frame",
 		"Budget %",
+		"Overruns",
 	)
-	fmt.println("------ ------------ ------------ ------------ ------------ ----------")
+	fmt.println("------ ------------ ------------ ------------ ------------ ---------- ----------")
 	counts := []int{opts.voices}
 	if opts.sweep {counts = []int{16, 32, 64, 128}}
 	for count in counts {
 		timing := render_benchmark(opts, count)
 		fmt.printfln(
-			"%6s %12s %12s %12s %12s %10s",
+			"%6s %12s %12s %12s %12s %10s %10s",
 			fmt.tprint(count),
 			fmt.tprintf("%.2f", timing.mean_us),
 			fmt.tprintf("%.2f", timing.p50_us),
 			fmt.tprintf("%.2f", timing.p99_us),
 			fmt.tprintf("%.2f", timing.mean_us / f64(opts.frames)),
 			fmt.tprintf("%.2f", timing.mean_us / deadline_us * 100),
+			fmt.tprintf("%v/%v", timing.deadline_misses, opts.blocks),
 		)
 	}
 }
