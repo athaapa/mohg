@@ -26,8 +26,12 @@ process_parameter_events :: proc "contextless" (
 	synth: ^Synth,
 	queue: ^Spsc_Queue(Parameter_Event, PARAMETER_QUEUE_CAPACITY),
 ) {
-	event, ok := spsc_try_pop(queue)
-	if ok {
+	for {
+		event, ok := spsc_try_pop(queue)
+		if !ok {
+			break
+		}
+
 		switch e in event {
 		case Ladder_Filter_Cutoff_Event:
 			ladder_filter_set_parameters(
@@ -54,19 +58,7 @@ process_parameter_events :: proc "contextless" (
 		}
 
 		for i in 0 ..< synth.voices.voice_count {
-			ladder_filter_set_parameters(
-				&synth.voices.voices[i].left_ladder_filter,
-				synth.ladder_filter.cutoff_hz,
-				synth.ladder_filter.resonance,
-				synth.ladder_filter.drive,
-			)
-			ladder_filter_set_parameters(
-				&synth.voices.voices[i].right_ladder_filter,
-				synth.ladder_filter.cutoff_hz,
-				synth.ladder_filter.resonance,
-				synth.ladder_filter.drive,
-			)
-
+			voice_apply_filter_parameters(synth, &synth.voices.voices[i])
 		}
 	}
 }

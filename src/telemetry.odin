@@ -17,7 +17,6 @@ Telemetry_Kind :: enum {
 Telemetry_Record :: struct {
 	kind:      Telemetry_Kind,
 	frame:     u64,
-	subframe:  u8,
 	voice_id:  u64,
 	note:      u8,
 	stolen:    bool,
@@ -47,10 +46,9 @@ telemetry_drain :: proc(sink: ^Telemetry) {
 		r, ok := spsc_try_pop(&sink.queue)
 		if !ok {break}
 		fmt.printf(
-			"[audio] %v frame=%d sub=%d voice=%d note=%d stolen=%v amp=%.6f filter=(%.9f, %.9f)\n",
+			"[audio] %v frame=%d voice=%d note=%d stolen=%v amp=%.6f filter=(%.9f, %.9f)\n",
 			r.kind,
 			r.frame,
-			r.subframe,
 			r.voice_id,
 			r.note,
 			r.stolen,

@@ -105,14 +105,25 @@ capture_synth :: proc(opts: Options, factor, tone_bin: int) -> (samples: []f64, 
 	mohg.synth_process_midi(&synth, &midi, &parameters)
 	// Exact FFT-bin tuning avoids confusing leakage with aliasing. All signal
 	// generation after this setup goes through the production renderer.
-	voices.voices[0].frequency = frequency
+	voice := &voices.voices[0]
+	voice.frequency = frequency
+	oversampled_rate := synth.sample_rate * f64(synth.oversampling_factor)
+	for osc_idx in 0 ..< synth.unison_count {
+		osc := &voice.oscillators[osc_idx]
+		cents := voice.tune_cents + osc.detune + osc.static_cents
+		mohg.oscillator_set_frequency(
+			osc,
+			frequency * mohg.cents_to_freq_multiplier(cents),
+			oversampled_rate,
+		)
+	}
 	samples = make([]f64, n)
 	warmup := rate / 10
 	buffer: [64 * CHANNEL_COUNT]f32
 	position := 0
 	for position < warmup + n {
 		frames := min(64, warmup + n - position)
-		mohg.synth_render(&synth, &voices, raw_data(buffer[:]), frames, CHANNEL_COUNT)
+		mohg.synth_render(&synth, raw_data(buffer[:]), frames, CHANNEL_COUNT)
 		for frame in 0 ..< frames {
 			left := f64(buffer[frame * CHANNEL_COUNT])
 			right := f64(buffer[frame * CHANNEL_COUNT + 1])

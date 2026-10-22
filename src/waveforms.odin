@@ -3,7 +3,7 @@ package mohg
 import "core:math"
 
 generate_sine_wave :: proc "contextless" (phase: f64) -> f64 {
-	return math.sin(2 * math.PI * phase)
+	return math.sin(math.TAU * phase)
 }
 
 generate_square_wave :: proc "contextless" (phase: f64, step: f64) -> f64 {
@@ -18,6 +18,7 @@ generate_square_wave :: proc "contextless" (phase: f64, step: f64) -> f64 {
 	return wave
 }
 
+// TODO: Investigate subharmonics above E7
 generate_triangle_wave :: proc "contextless" (phase: f64, step: f64) -> f64 {
 	wave := 1.0 - 4.0 * math.abs(phase - 0.5)
 

@@ -31,14 +31,24 @@ main :: proc() {
 		ladder_filter = Ladder_Filter{},
 		voices = &voices,
 		max_voices = 4,
-		unison_count = 5,
+		unison_count = 3,
 		detune_cents = 15,
 		rng = RNG{state = 1},
-		waveform = Waveform.SQUARE,
+		waveform = Waveform.SAW,
 		oversampling_factor = 1,
 		left_decimator = Decimator{},
 		right_decimator = Decimator{},
+		analog = Analog_Config {
+			voice_tune_spread_cents = 2.5,
+			voice_cutoff_spread = 0.05,
+			voice_resonance_spread = 0.02,
+			osc_tune_spread_cents = 1,
+			drift_rms_cents = 1.5,
+			drift_rate_hz = 0.5,
+		},
 	}
+
+	synth_update_drift_coefficients(&synth)
 
 	midi: Midi_Input
 	midi_event_queue := Spsc_Queue(Midi_Event, MIDI_QUEUE_CAPACITY){}
@@ -64,8 +74,17 @@ main :: proc() {
 	)
 	ladder_filter_set_parameters(&engine.synth.ladder_filter, 10_000, 0, 2)
 
-	decimator_init(&engine.synth.left_decimator, synth.oversampling_factor, synth.sample_rate)
-	decimator_init(&engine.synth.right_decimator, synth.oversampling_factor, synth.sample_rate)
+	decimator_init(
+		&engine.synth.left_decimator,
+		synth.oversampling_factor,
+		engine.synth.sample_rate,
+	)
+	decimator_init(
+		&engine.synth.right_decimator,
+		synth.oversampling_factor,
+		engine.synth.sample_rate,
+	)
+
 
 	// start
 	status = AudioOutputUnitStart(unit)

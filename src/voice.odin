@@ -3,9 +3,17 @@ package mohg
 import "core:math"
 
 Oscillator :: struct {
-	phase: f64,
-	pan:   f64,
-	drift: f64,
+	phase:        f64,
+	pan:          f64,
+	pan_angle:    f64,
+	left_gain:    f64,
+	right_gain:   f64,
+	freq:         f64,
+	phase_step:   f64,
+	detune:       f64,
+	drift:        f64,
+	static_cents: f64,
+	base_step:    f64,
 }
 
 Voice :: struct {
@@ -18,6 +26,9 @@ Voice :: struct {
 	right_ladder_filter: Ladder_Filter,
 	frequency:           f64,
 	oscillators:         [16]Oscillator,
+	tune_cents:          f64,
+	cutoff_mult:         f64,
+	resonance_offset:    f64,
 }
 
 Voices :: struct {

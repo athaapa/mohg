@@ -56,13 +56,13 @@ render_benchmark :: proc(opts: Options, voice_count: int) -> Render_Timing {
 	durations := make([]u64, opts.blocks)
 	defer delete(durations)
 	for _ in 0 ..< opts.warmup {
-		mohg.synth_render(&synth, &voices, raw_data(samples), opts.frames, CHANNEL_COUNT)
+		mohg.synth_render(&synth, raw_data(samples), opts.frames, CHANNEL_COUNT)
 	}
 	timebase: mohg.Mach_Timebase_Info
 	if mohg.mach_timebase_info(&timebase) != 0 {panic("mach_timebase_info failed")}
 	for i in 0 ..< opts.blocks {
 		start := mohg.mach_absolute_time()
-		mohg.synth_render(&synth, &voices, raw_data(samples), opts.frames, CHANNEL_COUNT)
+		mohg.synth_render(&synth, raw_data(samples), opts.frames, CHANNEL_COUNT)
 		durations[i] = mohg.mach_absolute_time() - start
 	}
 	// Summation and sorting happen after measurement. Percentiles use nearest

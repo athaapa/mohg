@@ -29,7 +29,7 @@ render :: proc "c" (
 	synth_process_midi(synth, engine.midi_event_queue, engine.parameter_event_queue)
 	process_parameter_events(synth, engine.parameter_event_queue)
 
-	synth_render(synth, synth.voices, samples, int(inNumberFrames), channel_count)
+	synth_render(synth, samples, int(inNumberFrames), channel_count)
 
 	elapsed := mach_absolute_time() - start
 
