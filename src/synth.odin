@@ -400,13 +400,12 @@ synth_render :: proc "contextless" (
 
 			push_decimator(oversample, &synth.left_decimator, &synth.right_decimator)
 
-			oversample = apply_decimator(
-				oversample,
-				&synth.left_decimator,
-				&synth.right_decimator,
-			)
-
 			if (i == synth.oversampling_factor - 1) {
+				oversample = apply_decimator(
+					oversample,
+					&synth.left_decimator,
+					&synth.right_decimator,
+				)
 
 				oversample = chorus_process(oversample, &synth.chorus)
 				sample = cast([2]f32)(oversample)
