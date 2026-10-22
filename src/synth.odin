@@ -35,6 +35,7 @@ Synth :: struct {
 	analog:              Analog_Config,
 	drift_coeff:         f64,
 	drift_noise_gain:    f64,
+	chorus:              Chorus,
 }
 
 Analog_Config :: struct {
@@ -407,6 +408,7 @@ synth_render :: proc "contextless" (
 
 			if (i == synth.oversampling_factor - 1) {
 
+				oversample = chorus_process(oversample, &synth.chorus)
 				sample = cast([2]f32)(oversample)
 			}
 		}

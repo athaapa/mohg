@@ -46,6 +46,7 @@ main :: proc() {
 			drift_rms_cents = 1.5,
 			drift_rate_hz = 0.5,
 		},
+		chorus = Chorus{},
 	}
 
 	synth_update_drift_coefficients(&synth)
@@ -85,6 +86,7 @@ main :: proc() {
 		engine.synth.sample_rate,
 	)
 
+	chorus_init(&engine.synth.chorus, engine.synth.sample_rate)
 
 	// start
 	status = AudioOutputUnitStart(unit)
