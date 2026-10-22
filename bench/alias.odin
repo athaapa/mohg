@@ -7,6 +7,7 @@ import "core:os"
 
 REFERENCE_FACTOR :: 8
 SPECTRUM_FLOOR_DB :: -100.0
+ALIAS_MAX_HARMONIC :: 63
 
 FFT_Value :: struct {
 	re, im: f64,
@@ -176,6 +177,42 @@ fold_bin :: proc(bin, count: int) -> int {
 	return wrapped > count / 2 ? count - wrapped : wrapped
 }
 
+Alias_Energy :: struct {
+	total_db:    f64,
+	largest_db:  f64,
+	largest_bin: int,
+	components:  int,
+}
+
+// Sums power only at the bins where harmonics above the output Nyquist land,
+// relative to the fundamental. Summing every non-harmonic bin would mostly
+// measure the voice noise, which the decimator also attenuates with oversampling.
+// Folds that land on DC or an in-band harmonic are skipped because they can't
+// be separated from real content.
+alias_energy :: proc(amps: []f64, tone_bin, samples, oversampling: int) -> Alias_Energy {
+	counted := make([]bool, samples / 2 + 1)
+	defer delete(counted)
+	result := Alias_Energy{largest_db = SPECTRUM_FLOOR_DB}
+	power: f64
+	fundamental := amps[tone_bin] * amps[tone_bin]
+	for h in 2 ..= ALIAS_MAX_HARMONIC {
+		true_bin := h * tone_bin
+		if true_bin <= samples / 2 {continue}
+		lands := fold_bin(fold_bin(true_bin, samples * oversampling), samples)
+		if lands == 0 || lands % tone_bin == 0 || counted[lands] {continue}
+		counted[lands] = true
+		power += amps[lands] * amps[lands]
+		result.components += 1
+		db := amplitude_db(amps[lands] / amps[tone_bin])
+		if db > result.largest_db {
+			result.largest_db = db
+			result.largest_bin = lands
+		}
+	}
+	result.total_db = 10 * math.log10(math.max(power / fundamental, 1e-24))
+	return result
+}
+
 run_alias :: proc(opts: Options) {
 	tone_bin := int(math.round(opts.frequency * f64(opts.samples) / SAMPLE_RATE))
 	bin_hz := f64(SAMPLE_RATE) / f64(opts.samples)
@@ -247,4 +284,24 @@ run_alias :: proc(opts: Options) {
 			fmt.tprintf("%.1f", amplitude_db(ref_amps[lands])),
 		)
 	}
+
+	base_alias := alias_energy(base_amps, tone_bin, opts.samples, opts.oversampling)
+	ref_alias := alias_energy(ref_amps, tone_bin, opts.samples, opts.oversampling)
+	fmt.printfln(
+		"\nFolded harmonics 2..%v, power at their 48 kHz landing bins relative to the fundamental:",
+		ALIAS_MAX_HARMONIC,
+	)
+	fmt.printfln("  fundamental:      %.1f dBFS", amplitude_db(base_amps[tone_bin]))
+	fmt.printfln(
+		"  48 kHz output:    %.1f dB total over %v bins, largest %.1f dB at %.1f Hz",
+		base_alias.total_db,
+		base_alias.components,
+		base_alias.largest_db,
+		f64(base_alias.largest_bin) * bin_hz,
+	)
+	fmt.printfln(
+		"  same bins in ref: %.1f dB total, largest %.1f dB",
+		ref_alias.total_db,
+		ref_alias.largest_db,
+	)
 }

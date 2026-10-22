@@ -2,7 +2,17 @@ package bench
 
 import mohg "../src"
 import "core:fmt"
+import "core:os"
 import "core:slice"
+import "core:strings"
+
+foreign import System "system:System"
+
+QOS_CLASS_USER_INTERACTIVE :: 0x21
+
+foreign System {
+	pthread_set_qos_class_self_np :: proc "c" (qos_class: u32, relative_priority: i32) -> i32 ---
+}
 
 Render_Timing :: struct {
 	mean_us, p50_us, p99_us: f64,
@@ -60,6 +70,11 @@ render_benchmark :: proc(
 	defer delete(samples)
 	durations := make([]u64, opts.blocks)
 	defer delete(durations)
+	if os.get_env("MOHG_QOS", context.temp_allocator) == "interactive" {
+		if pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0) != 0 {
+			panic("pthread_set_qos_class_self_np failed")
+		}
+	}
 	for _ in 0 ..< opts.warmup {
 		mohg.synth_render(&synth, raw_data(samples), opts.frames, CHANNEL_COUNT)
 	}
@@ -80,6 +95,19 @@ render_benchmark :: proc(
 		durations[i] = mohg.mach_absolute_time() - start
 	}
 	mohg_bench_signpost_end(signpost_log, interval)
+	// Written before sorting so the rows stay in execution order.
+	if path := os.get_env("MOHG_BLOCK_CSV", context.temp_allocator); path != "" {
+		b := strings.builder_make()
+		defer strings.builder_destroy(&b)
+		strings.write_string(&b, "block,us\n")
+		ticks_per_us := f64(timebase.numer) / f64(timebase.denom) / 1000
+		for ticks, i in durations {
+			fmt.sbprintf(&b, "%v,%.3f\n", i, f64(ticks) * ticks_per_us)
+		}
+		if err := os.write_entire_file(path, b.buf[:]); err != nil {
+			panic("failed to write MOHG_BLOCK_CSV")
+		}
+	}
 	// Summation and sorting happen after measurement. Percentiles use nearest
 	// rank: ceil(p * N) - 1, including when only one block is requested.
 	total_ticks: u64
