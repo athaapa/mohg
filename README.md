@@ -2,10 +2,6 @@
 
 A simple polyphonic synthesizer for macOS written in Odin.
 
-**WIP.** i'm building this to learn real-time audio and performance engineering.
-the goal is to render within a 64-sample buffer at 48 kHz, which gives me about
-1.33 ms to finish each block.
-
 i started by getting a sine wave to play through `AudioToolbox`, then used
 `CoreMIDI` to connect my MIDI keyboard. from there i've been adding synth
 features and investigating how much work happens in the render callback.
