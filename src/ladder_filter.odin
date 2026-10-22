@@ -24,7 +24,9 @@ Ladder_Filter :: struct {
 	last_iterations: int,
 	last_residual:   f64,
 	drive:           f64,
+	last_u:          f64,
 }
+
 
 ladder_filter_set_sample_rate :: proc "contextless" (filter: ^Ladder_Filter, sample_rate: f64) {
 	filter.sample_rate = math.max(sample_rate, 0)
@@ -52,6 +54,7 @@ ladder_filter_set_parameters :: proc "contextless" (
 
 ladder_filter_reset :: proc "contextless" (filter: ^Ladder_Filter) {
 	filter.stage = [4]f64{}
+	filter.last_u = 0
 }
 
 ladder_filter_process_stage :: proc "contextless" (
@@ -82,41 +85,40 @@ ladder_calculate_state_contribution :: proc "contextless" (filter: ^Ladder_Filte
 	)
 }
 
+ladder_forward :: proc "contextless" (filter: ^Ladder_Filter, u: f64) -> (y4: f64, dy4_du: f64) {
+	G := filter.G
+	omG := 1.0 - G
+	x := u
+	d := 1.0
+	for i in 0 ..< 4 {
+		t := fast_tanh(x)
+		d *= G * (1.0 - t * t)
+		x = G * t + omG * filter.stage[i]
+	}
+	return x, d
+}
+
 ladder_filter_process :: proc "contextless" (filter: ^Ladder_Filter, input: f64) -> f64 {
 	if filter.sample_rate <= 0 {
 		return input
 	}
-
 	input := input * filter.drive
-
 	k := filter.resonance * 4.0
-
-	S := ladder_calculate_state_contribution(filter)
-	g4 := filter.G * filter.G * filter.G * filter.G
-	A := g4
-
-	u := (input - k * S) / (1.0 + k * g4)
-
+	u := filter.last_u
 	for i in 0 ..< MAX_ITERATIONS {
-		u_tanh := math.tanh(u)
-		u = u - (u + k * (A * u_tanh + S) - input) / (1 + k * A * (1 - u_tanh * u_tanh))
-		u_tanh = math.tanh(u)
-		F_u := u + k * (A * u_tanh + S) - input
-
+		y4, dy4 := ladder_forward(filter, u)
+		F_u := u + k * y4 - input
 		filter.last_iterations = i + 1
 		filter.last_residual = math.abs(F_u)
-		if (math.abs(F_u) < TOLERANCE) {
+		if math.abs(F_u) < TOLERANCE {
 			break
 		}
+		u -= F_u / (1.0 + k * dy4)
 	}
-
-	s1 := ladder_filter_process_stage(filter, math.tanh(u), 0)
-	s2 := ladder_filter_process_stage(filter, s1, 1)
-	s3 := ladder_filter_process_stage(filter, s2, 2)
-	s4 := ladder_filter_process_stage(filter, s3, 3)
-
-
-	s4 /= filter.drive
-
-	return s4
+	filter.last_u = u
+	x := u
+	for i in 0 ..< 4 {
+		x = ladder_filter_process_stage(filter, fast_tanh(x), i)
+	}
+	return x / filter.drive
 }
