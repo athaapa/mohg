@@ -10,6 +10,30 @@ i started by getting a sine wave to play through `AudioToolbox`, then used
 `CoreMIDI` to connect my MIDI keyboard. from there i've been adding synth
 features and investigating how much work happens in the render callback.
 
+i wrote up the performance investigation here:
+[mohg: Building and profiling a real-time synthesizer](https://athapa.dev/systems/performance/audio/2026/10/22/mohg.html)
+
+## results
+
+with 16 unison oscillators per voice, this is how many voices fit before the
+mean render time crosses the 1.33 ms budget (offline benchmark, Apple M4):
+
+| oversampling | first oversampled version | now |
+| --- | ---: | ---: |
+| 1x | ~119 | ~117 |
+| 2x | ~67 | ~78 |
+| 4x | ~35 | ~59 |
+
+at 4x, 32 voices went from 1209.89 µs to about 670 µs per block. most of that
+came from caching per-note oscillator values, replacing `tanh` with a rational
+approximation, and only computing the decimator outputs i keep. i also added
+heavier saturation, drift, and noise along the way, which is why 1x barely moved.
+
+![voice-count sweep](docs/final-voice-sweep.png)
+
+individual blocks still go over budget in bursts, even well under capacity.
+that's the main open question, and the writeup goes through what i've ruled out.
+
 ## building
 
 you'll need macOS, Odin, and Apple's Clang/macOS SDK from Xcode or the Command
