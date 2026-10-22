@@ -97,7 +97,7 @@ synth_process_midi :: proc "contextless" (
 					_ = spsc_try_push(parameter_queue, param_event)
 				} else if (e.number == 76) { 	// drive
 					param_event := Ladder_Filter_Drive_Event {
-						drive = min(LADDER_MIN_DRIVE, LADDER_MAX_DRIVE * f64(e.value) / 127),
+						drive = max(LADDER_MIN_DRIVE, LADDER_MAX_DRIVE * f64(e.value) / 127),
 					}
 
 					_ = spsc_try_push(parameter_queue, param_event)
