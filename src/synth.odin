@@ -53,6 +53,7 @@ Stereo64 :: [2]f64
 Stereo32 :: [2]f32
 
 CENTS_TO_LINEAR :: math.LN2 / 1200.0
+MIX_DRIVE :: 2.0
 
 synth_update_drift_coefficients :: proc "contextless" (synth: ^Synth) {
 	if synth.sample_rate <= 0 || synth.analog.drift_rate_hz <= 0 {
@@ -371,10 +372,9 @@ synth_render :: proc "contextless" (
 
 
 				voice_sample /= f64(synth.unison_count)
-				// TODO: Make this constant
-				mix_drive := 2.0
 
-				voice_sample = saturate_samples(voice_sample, mix_drive)
+
+				voice_sample = saturate_samples(voice_sample, MIX_DRIVE)
 
 				voice_sample = apply_noise(voice_sample, &synth.rng)
 

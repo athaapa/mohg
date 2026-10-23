@@ -27,7 +27,7 @@ main :: proc() {
 			attack_seconds = 0.15,
 			decay_seconds = 0.25,
 			sustain_level = 1,
-			release_seconds = 0.15,
+			release_seconds = 2,
 		},
 		ladder_filter = Ladder_Filter{},
 		voices = &voices,
