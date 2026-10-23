@@ -77,6 +77,8 @@ capture_synth :: proc(opts: Options, factor, tone_bin: int) -> (samples: []f64, 
 	frequency := f64(tone_bin) * SAMPLE_RATE / f64(opts.samples)
 	voices := mohg.Voices{}
 	synth := mohg.Synth {
+		volume = 1,
+		volume_target = 1,
 		sample_rate = f64(rate),
 		voices = &voices,
 		max_voices = 1,

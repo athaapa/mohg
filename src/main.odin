@@ -22,6 +22,8 @@ main :: proc() {
 	synth := Synth {
 		telemetry = &telemetry,
 		sample_rate = 48_000,
+		volume = 1,
+		volume_target = 1,
 		adsr_config = ADSR_Config {
 			attack_seconds = 0.15,
 			decay_seconds = 0.25,

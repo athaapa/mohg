@@ -29,6 +29,8 @@ render_benchmark :: proc(
 	voices := mohg.Voices{}
 	synth := mohg.Synth {
 		sample_rate = SAMPLE_RATE,
+		volume = 1,
+		volume_target = 1,
 		adsr_config = mohg.ADSR_Config {
 			attack_seconds = 0.025,
 			decay_seconds = 0.25,

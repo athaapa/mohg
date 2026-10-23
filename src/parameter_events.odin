@@ -5,6 +5,10 @@ package mohg
 
 PARAMETER_QUEUE_CAPACITY :: 512
 
+Volume_Event :: struct {
+	gain: f64,
+}
+
 Ladder_Filter_Cutoff_Event :: struct {
 	cutoff_hz: f64,
 }
@@ -17,6 +21,7 @@ Ladder_Filter_Drive_Event :: struct {
 }
 
 Parameter_Event :: union {
+	Volume_Event,
 	Ladder_Filter_Cutoff_Event,
 	Ladder_Filter_Resonance_Event,
 	Ladder_Filter_Drive_Event,
@@ -33,6 +38,9 @@ process_parameter_events :: proc "contextless" (
 		}
 
 		switch e in event {
+		case Volume_Event:
+			synth.volume_target = clamp(e.gain, 0, 1)
+			continue
 		case Ladder_Filter_Cutoff_Event:
 			ladder_filter_set_parameters(
 				&synth.ladder_filter,

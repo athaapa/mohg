@@ -21,6 +21,8 @@ Synth :: struct {
 	rendered_frames:     u64,
 	next_voice_id:       u64,
 	sample_rate:         f64,
+	volume:              f64,
+	volume_target:       f64,
 	adsr_config:         ADSR_Config,
 	ladder_filter:       Ladder_Filter,
 	max_voices:          u8,
@@ -176,6 +178,8 @@ synth_process_midi :: proc "contextless" (
 					}
 
 					_ = spsc_try_push(parameter_queue, param_event)
+				} else if (e.number == 77) { // master volume
+					_ = spsc_try_push(parameter_queue, Volume_Event{gain = f64(e.value) / 127})
 				} else if (e.number == 76) { 	// drive
 					param_event := Ladder_Filter_Drive_Event {
 						drive = max(LADDER_MIN_DRIVE, LADDER_MAX_DRIVE * f64(e.value) / 127),
@@ -342,6 +346,8 @@ synth_render :: proc "contextless" (
 	channel_count: int,
 ) {
 	voices := synth.voices
+	// A full-scale volume change takes 5 ms, independent of block size.
+	volume_step := 1.0 / max(1.0, 0.005 * synth.sample_rate)
 	for frame in 0 ..< frame_count {
 		sample: Stereo32
 
@@ -412,7 +418,8 @@ synth_render :: proc "contextless" (
 			}
 		}
 
-		// TODO: Volume control
+		synth.volume += clamp(synth.volume_target - synth.volume, -volume_step, volume_step)
+		sample *= f32(synth.volume)
 
 		voice_idx: u8
 

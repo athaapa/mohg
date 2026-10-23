@@ -41,7 +41,8 @@ the settings are in [src/main.odin](src/main.odin). the current defaults are
 edit these settings and rebuild to change the sound.
 
 i'm using an Arturia MiniLab 3. its knobs send CC 74 for filter cutoff,
-71 for resonance, and 76 for drive.
+71 for resonance, 76 for drive, and 77 for master volume. volume ranges from
+mute (0) to full level (127), with a 5 ms ramp for a full-range change.
 
 ## how it works
 
