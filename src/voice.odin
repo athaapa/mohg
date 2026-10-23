@@ -18,6 +18,7 @@ Oscillator :: struct {
 
 Voice :: struct {
 	telemetry_id:        u64,
+	telemetry_filter_output: Stereo64,
 	note:                u8,
 	gate:                bool,
 	state:               ADSR_State,

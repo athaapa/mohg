@@ -17,10 +17,9 @@ main :: proc() {
 	}
 
 	voices := Voices{}
-	telemetry := Telemetry{}
+	when TELEMETRY_ENABLED {telemetry := Telemetry{}}
 
 	synth := Synth {
-		telemetry = &telemetry,
 		sample_rate = 48_000,
 		volume = 1,
 		volume_target = 1,
@@ -51,6 +50,7 @@ main :: proc() {
 		chorus = Chorus{},
 	}
 
+	when TELEMETRY_ENABLED {synth.telemetry = &telemetry}
 	synth_update_drift_coefficients(&synth)
 
 	midi: Midi_Input
@@ -67,7 +67,6 @@ main :: proc() {
 	if (status != 0) {
 		panic("failed to initalize midi")
 	}
-
 	defer {
 		cleanup_status := midi_input_destroy(&midi)
 		if cleanup_status != 0 {fmt.printfln("failed to dispose MIDI client: %v", cleanup_status)}
@@ -100,14 +99,18 @@ main :: proc() {
 	if (status != 0) {
 		panic("failed to start audio unit")
 	}
-	observer := thread.create_and_start_with_data(&telemetry, telemetry_consume)
-	defer thread.destroy(observer)
+	when TELEMETRY_ENABLED {
+		observer := thread.create_and_start_with_data(&telemetry, telemetry_consume)
+		defer thread.destroy(observer)
+	}
 
 	fmt.println("Press Enter to exit")
 	input: [1]byte
 	_, _ = os.read(os.stdin, input[:])
 
 	audio_destroy(&unit)
-	intrinsics.atomic_store_explicit(&telemetry.stop, true, .Release)
-	thread.join(observer)
+	when TELEMETRY_ENABLED {
+		intrinsics.atomic_store_explicit(&telemetry.stop, true, .Release)
+		thread.join(observer)
+	}
 }

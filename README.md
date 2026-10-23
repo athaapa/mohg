@@ -32,6 +32,13 @@ odin build src -o:speed -out:build/mohg
 ./build/mohg
 ```
 
+telemetry is disabled by default. to enable event recording and the
+telemetry observer thread, add `-define:MOHG_TELEMETRY=true`:
+
+```sh
+odin build src -o:speed -define:MOHG_TELEMETRY=true -out:build/mohg
+```
+
 the synth connects to the first MIDI source it can open and uses the default
 audio output. play a note to hear it. press Enter to exit. keep the volume low
 while experimenting with resonance and drive.

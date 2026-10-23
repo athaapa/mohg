@@ -100,19 +100,21 @@ synth_process_midi :: proc "contextless" (
 		case Midi_Note_On:
 			{
 				voice, stolen := note_on(synth.voices, synth.max_voices, e.note)
-				synth.next_voice_id += 1
-				voice.telemetry_id = synth.next_voice_id
-				telemetry_emit(
-					synth.telemetry,
-					Telemetry_Record {
-						kind = .NOTE_ON,
-						frame = synth.rendered_frames,
-						voice_id = voice.telemetry_id,
-						note = voice.note,
-						stolen = stolen,
-						amplitude = voice.current_amplitude,
-					},
-				)
+				when TELEMETRY_ENABLED {
+					synth.next_voice_id += 1
+					voice.telemetry_id = synth.next_voice_id
+					telemetry_emit(
+						synth.telemetry,
+						Telemetry_Record {
+							kind = .NOTE_ON,
+							frame = synth.rendered_frames,
+							voice_id = voice.telemetry_id,
+							note = voice.note,
+							stolen = stolen,
+							amplitude = voice.current_amplitude,
+						},
+					)
+				}
 				if (!stolen) {
 					voice.left_ladder_filter = synth.ladder_filter
 					voice.right_ladder_filter = synth.ladder_filter
@@ -290,22 +292,6 @@ voice_update_adsr :: proc "contextless" (
 		new_state = on_release(voice, sample_rate, adsr_config.release_seconds)
 	}
 
-	/*
-	if new_state == .RELEASE && voice.state != .RELEASE {
-		telemetry_emit(
-			telemetry,
-			Telemetry_Record {
-				kind = .RELEASE_STARTED,
-				frame = synth.rendered_frames + u64(frame),
-				voice_id = voice.telemetry_id,
-				note = voice.note,
-				amplitude = voice.current_amplitude,
-				left = f64(left_sample),
-				right = f64(right_sample),
-			},
-		)
-	}
-    */
 	voice.state = new_state
 }
 
@@ -385,7 +371,6 @@ synth_render :: proc "contextless" (
 
 
 				voice_sample /= f64(synth.unison_count)
-
 				// TODO: Make this constant
 				mix_drive := 2.0
 
@@ -399,6 +384,11 @@ synth_render :: proc "contextless" (
 					&voice.right_ladder_filter,
 				)
 
+				when TELEMETRY_ENABLED {
+					if synth.telemetry != nil && i == synth.oversampling_factor - 1 {
+						voice.telemetry_filter_output = voice_sample
+					}
+				}
 				oversample += (voice_sample * voice.current_amplitude)
 
 				voice_idx += 1
@@ -426,23 +416,18 @@ synth_render :: proc "contextless" (
 		for voice_idx < voices.voice_count {
 			voice := &voices.voices[voice_idx]
 
+			when TELEMETRY_ENABLED {previous_state := voice.state}
 			voice_update_adsr(voice, synth.sample_rate, synth.adsr_config)
+			when TELEMETRY_ENABLED {
+				if voice.state == .RELEASE && previous_state != .RELEASE {
+					telemetry_emit_voice(synth.telemetry, .RELEASE_STARTED, synth.rendered_frames + u64(frame), voice)
+				}
+			}
 
 			if voice.state == ADSR_State.IDLE && !voice.gate {
-				/*
-				telemetry_emit(
-					synth.telemetry,
-					Telemetry_Record {
-						kind = .VOICE_REMOVED,
-						frame = synth.rendered_frames + u64(frame),
-						voice_id = voice.telemetry_id,
-						note = voice.note,
-						amplitude = voice.current_amplitude,
-						left = f64(left_sample),
-						right = f64(right_sample),
-					},
-				)
-                */
+				when TELEMETRY_ENABLED {
+					telemetry_emit_voice(synth.telemetry, .VOICE_REMOVED, synth.rendered_frames + u64(frame), voice)
+				}
 				voice_remove(voices, voice_idx)
 				continue
 			}
@@ -454,5 +439,5 @@ synth_render :: proc "contextless" (
 		samples[frame * 2] = sample[0]
 		samples[frame * 2 + 1] = sample[1]
 	}
-	synth.rendered_frames += u64(frame_count)
+	when TELEMETRY_ENABLED {synth.rendered_frames += u64(frame_count)}
 }
