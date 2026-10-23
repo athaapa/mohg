@@ -53,6 +53,7 @@ foreign core_midi_bridge {
 
 foreign CoreMIDI {
 	MIDIClientCreate :: proc(name: CFStringRef, notifyProc: MIDINotifyProc, notifyRefCon: rawptr, outClient: ^MIDIClientRef) -> OSStatus ---
+	MIDIClientDispose :: proc(client: MIDIClientRef) -> OSStatus ---
 	MIDIGetNumberOfSources :: proc() -> ItemCount ---
 	MIDIGetSource :: proc(_: ItemCount) -> MIDIEndpointRef ---
 	MIDIPortConnectSource :: proc(port: MIDIPortRef, source: MIDIEndpointRef, connRefCon: rawptr) -> OSStatus ---
@@ -139,22 +140,28 @@ midi_input_init :: proc(
 	queue: ^Spsc_Queue(Midi_Event, MIDI_QUEUE_CAPACITY),
 ) -> OSStatus {
 	name := CFStringCreateWithCString(nil, cstring("mohg"), kCFStringEncodingUTF8)
-	port_name := CFStringCreateWithCString(nil, cstring("port"), kCFStringEncodingUTF8)
-
 	if name == nil {
 		return 1
 	}
+	defer CFRelease(name)
 
+	port_name := CFStringCreateWithCString(nil, cstring("port"), kCFStringEncodingUTF8)
 	if port_name == nil {
 		return 1
 	}
 
-	defer CFRelease(name)
 	defer CFRelease(port_name)
 
 	status := MIDIClientCreate(name, nil, nil, &midi.client)
 	if (status != 0) {
-		return 1
+		return status
+	}
+	connected := false
+	defer {
+		if !connected {
+			cleanup_status := midi_input_destroy(midi)
+			if cleanup_status != 0 {fmt.printfln("failed to dispose MIDI client: %v", cleanup_status)}
+		}
 	}
 
 	status = mohg_midi_input_port_create(
@@ -167,7 +174,7 @@ midi_input_init :: proc(
 	)
 
 	if (status != 0) {
-		return 1
+		return status
 	}
 
 	source_count := MIDIGetNumberOfSources()
@@ -177,7 +184,6 @@ midi_input_init :: proc(
 	}
 
 
-	connected := false
 	for i in 0 ..< source_count {
 		source := MIDIGetSource(i)
 
@@ -194,6 +200,10 @@ midi_input_init :: proc(
 	return connected ? 0 : 1
 }
 
-// TODO: Destroy midi
-midi_input_destroy :: proc() {
+// Disposing the client also disposes its ports and their source connections.
+midi_input_destroy :: proc(midi: ^Midi_Input) -> OSStatus {
+	if midi.client == 0 {return 0}
+	status := MIDIClientDispose(midi.client)
+	if status == 0 {midi^ = {}}
+	return status
 }

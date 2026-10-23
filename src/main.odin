@@ -66,6 +66,11 @@ main :: proc() {
 		panic("failed to initalize midi")
 	}
 
+	defer {
+		cleanup_status := midi_input_destroy(&midi)
+		if cleanup_status != 0 {fmt.printfln("failed to dispose MIDI client: %v", cleanup_status)}
+	}
+
 	unit: AudioUnit
 	audio_init(&engine, &unit)
 
