@@ -3,6 +3,8 @@
 A polyphonic synthesizer for macOS written in Odin, with CoreMIDI input and
 CoreAudio output.
 
+https://github.com/user-attachments/assets/680c84df-2bac-4c42-b9db-95c4deebc8ff
+
 - Up to 16 detuned oscillators per voice with stereo panning
 - Anti-aliased waveforms, per-voice ADSR envelopes, and a nonlinear ladder filter
 - Oversampling with FIR decimation, oscillator drift, and stereo chorus
